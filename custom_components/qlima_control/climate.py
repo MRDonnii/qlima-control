@@ -496,6 +496,12 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         old = await self.async_get_last_state()
+        if old is None:
+            # First start: take over what the unit is doing now instead of
+            # switching a running unit off.
+            pump = self.hass.states.get(self._heat_pump)
+            if pump is not None and pump.state in {m.value for m in HVACMode} and pump.state != HVACMode.HEAT_COOL:
+                self._hvac_mode = HVACMode(pump.state)
         if old is not None:
             try:
                 self._hvac_mode = HVACMode(old.state)

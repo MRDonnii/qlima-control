@@ -234,3 +234,8 @@ async def test_config_flow_weights_step(hass, esp_device):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {"sensor.room_a": 60, "sensor.room_b": 40})
     assert result["type"] == "create_entry"
     assert result["data"]["temperature_weights"] == {"sensor.room_a": 60.0, "sensor.room_b": 40.0}
+
+
+async def test_new_thermostat_takes_over_running_mode(hass, esp_device):
+    entry = await _setup(hass, esp_device)
+    assert hass.data[DOMAIN][entry.entry_id].hvac_mode == "heat"

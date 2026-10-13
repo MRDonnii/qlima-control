@@ -1,19 +1,19 @@
 {
   "domain": "qlima_control",
   "name": "Qlima Control",
+  "after_dependencies": [
+    "esphome",
+    "notify"
+  ],
   "codeowners": [
     "@MRDonnii"
   ],
   "config_flow": true,
+  "dependencies": [],
   "documentation": "https://github.com/MRDonnii/qlima-control",
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/MRDonnii/qlima-control/issues",
   "requirements": [],
-  "version": "1.0.0",
-  "dependencies": [],
-  "after_dependencies": [
-    "esphome",
-    "notify"
-  ]
+  "version": "1.0.1"
 }

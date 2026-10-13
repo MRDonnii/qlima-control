@@ -378,10 +378,14 @@ async def test_user_turn_on_with_door_open_restarts_timers(hass, clock):
 
 
 def _sensor_state(hass, suffix: str):
-    for state in hass.states.async_all("sensor"):
-        if state.entity_id.endswith(suffix):
-            return state
-    raise AssertionError(f"no sensor ending in {suffix}: {[s.entity_id for s in hass.states.async_all('sensor')]}")
+    """Find one of our sensors by its unique-id key (entity ids differ between HA versions)."""
+    from homeassistant.helpers import entity_registry as er
+
+    key = suffix.lstrip("_")
+    for entry in er.async_get(hass).entities.values():
+        if entry.platform == DOMAIN and entry.domain == "sensor" and entry.unique_id.endswith("_" + key):
+            return hass.states.get(entry.entity_id)
+    raise AssertionError(f"no sensor {key}: {[s.entity_id for s in hass.states.async_all('sensor')]}")
 
 
 async def test_status_and_door_countdowns(hass, clock):
