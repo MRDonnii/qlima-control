@@ -17,7 +17,7 @@ esphome:
   name_add_mac_suffix: true
   project:
     name: mrdonnii.qlima-control
-    version: "1.0.0"
+    version: "1.1.0"
 
 esp32:
   variant: esp32c3
@@ -45,9 +45,27 @@ http_request:
 
 update:
   - platform: http_request
+    id: firmware_update
     name: Firmware
     source: https://mrdonnii.github.io/qlima-control/firmware/qlima-control-esp32c3.manifest.json
     update_interval: 6h
+    on_update_available:
+      - if:
+          condition:
+            switch.is_on: auto_update
+          then:
+            - delay: 10min   # lad en ny udgivelse falde på plads først
+            - update.perform:
+                id: firmware_update
+
+switch:
+  - platform: template
+    id: auto_update
+    name: Opdatér automatisk
+    icon: mdi:update
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
 
 wifi:
   output_power: 8.5dB   # mange ESP32-C3 SuperMini kommer ikke på WiFi ved fuld styrke

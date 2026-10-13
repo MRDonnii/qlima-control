@@ -9,6 +9,9 @@
 #   4,7 kΩ fra grøn til rød – anlægget kræver 5 V-niveau på sin RX
 #   IR-diode (940 nm) + 470 Ω på GPIO10 → GND, placeret ved anlæggets IR-modtager
 #     (Follow Me, auto-vip, lamel-trin, display)
+# Valgfri DS18B20-følere til målt COP (hver på sit eget ben, 4,7 kΩ fra data til 3V3):
+#   GPIO5 = udblæsning (i luftstrømmen under lamellerne)
+#   GPIO4 = indsugning (bag filteret i toppen af indedelen)
 # Sæt aldrig ESP'ens USB-C i, mens den sidder i anlægget.
 #
 # Rumtemperaturen sendes af Qlima Control-integrationen i Home Assistant
@@ -122,7 +125,27 @@ climate:
             id(send_follow_me).execute();
           }
 
+one_wire:
+  - platform: gpio
+    id: ow_supply
+    pin: GPIO5
+  - platform: gpio
+    id: ow_return
+    pin: GPIO4
+
 sensor:
+  - platform: dallas_temp
+    one_wire_id: ow_supply
+    name: Udblæsningstemperatur
+    update_interval: 15s
+    filters:
+      - filter_out: 85.0   # DS18B20's opstartsværdi
+  - platform: dallas_temp
+    one_wire_id: ow_return
+    name: Indsugningstemperatur
+    update_interval: 15s
+    filters:
+      - filter_out: 85.0
   - platform: template
     id: room_temp
     name: Rumtemperatur (modtaget)

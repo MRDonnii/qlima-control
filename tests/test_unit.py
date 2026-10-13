@@ -27,6 +27,8 @@ ESP = {
     "unit_temp": ("sensor", "Indetemperatur anlæg", "sensor.qlima_test_inde"),
     "filter_hours": ("sensor", "Driftstimer siden filterrens", "sensor.qlima_test_filter"),
     "online": ("binary_sensor", "Anlæg svarer", "binary_sensor.qlima_test_svarer"),
+    "supply_temp": ("sensor", "Udblæsningstemperatur", "sensor.qlima_test_supply"),
+    "return_temp": ("sensor", "Indsugningstemperatur", "sensor.qlima_test_return"),
 }
 
 
@@ -311,3 +313,53 @@ async def test_openings_switch_and_live_delays(hass, esp_device):
     assert thermostat.extra_state_attributes["opening_stage"] == "none"
     assert _state(hass, "switch", "openings_enabled").state == "off"
     assert not reloads
+
+
+
+async def test_away_lowers_the_heat_target(hass, esp_device):
+    hass.states.async_set("person.someone", "home")
+    entry = await _setup(hass, esp_device, presence_entity="person.someone", away_setback=3)
+    thermostat = hass.data[DOMAIN][entry.entry_id]
+    assert thermostat._eff_heat() == 22
+    hass.states.async_set("person.someone", "not_home")
+    await hass.async_block_till_done()
+    assert thermostat.is_away() and thermostat._eff_heat() == 19
+    assert thermostat.extra_state_attributes["effective_heat_target"] == 19
+
+
+async def test_energy_cost_runtime_and_starts(hass, esp_device):
+    hass.states.async_set("sensor.energy", "100.0", {"unit_of_measurement": "kWh"})
+    entry = await _setup(hass, esp_device, energy_sensor="sensor.energy")
+    stats = hass.data[DOMAIN][f"{entry.entry_id}_stats"]
+    hass.states.async_set("sensor.energy", "100.5")
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.energy", "101.0")
+    await hass.async_block_till_done()
+    assert stats.value("energy_day") == pytest.approx(1.0)
+    assert stats.value("cost_day") == pytest.approx(2.40)
+    stats._last_tick -= 60
+    stats._tick(None)
+    assert stats.value("starts_day") == 1
+    assert stats.value("runtime_day") == pytest.approx(60 / 3600, abs=1e-3)
+    await hass.async_block_till_done()
+    assert float(_state(hass, "sensor", "cost_today").state) == pytest.approx(2.40)
+
+
+async def test_measured_heat_and_cop(hass, esp_device):
+    hass.states.async_set("sensor.qlima_test_supply", "40.0")
+    hass.states.async_set("sensor.qlima_test_return", "22.0")
+    entry = await _setup(hass, esp_device)
+    unit = hass.data[DOMAIN][f"{entry.entry_id}_unit"]
+    # fan auto → medium airflow 309 m³/h for the S 5225: 309 × 0.335 × 18 ≈ 1863 W
+    assert unit.measured_heat() == pytest.approx(1863, abs=2)
+    assert unit.measured_cop() == pytest.approx(1863 / 600, abs=0.01)
+
+
+async def test_diagnostics(hass, esp_device):
+    from custom_components.qlima_control.diagnostics import async_get_config_entry_diagnostics
+
+    entry = await _setup(hass, esp_device, notify_service="notify.mobile_app_x")
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert diag["config"]["notify_service"] == "**REDACTED**"
+    assert diag["esp_entities"]["climate"] == "climate.qlima_test_varmepumpe"
+    assert diag["readings"]["room_temperature"] == 21.5

@@ -58,6 +58,10 @@ En ESP32-C3 til ca. 30 kr. erstatter WiFi-sticken i anlæggets USB-port, og inte
 
 ### Ledningsføring
 
+<p align="center"><img src="docs/images/wiring.png" alt="Ledningsdiagram" width="900"></p>
+
+Samme i tekst:
+
 ```
 USB-A stik (til anlægget)          ESP32-C3
 ──────────────────────────         ──────────────────────────
@@ -70,6 +74,10 @@ Hvid   D−  (anlæg TX) ──────────── GPIO7   (RX, inter
 Sort   GND ─────────────────────── GND
 
 ESP32-C3 GPIO10 ── 470 Ω ── (+) langt ben  [IR-diode 940 nm]  kort ben (−) ── GND
+
+Valgfri DS18B20 (målt COP), hver på sit eget ben:
+  rød → 3V3   sort → GND   gul → GPIO5 (udblæsning) / GPIO4 (indsugning)
+  4,7 kΩ fra gul (data) til 3V3 – én pr. føler
 ```
 
 - Farverne i USB-kabler passer ikke altid. Set forfra med plastikken nedad er benene i USB-A-stikket fra venstre: **5V, D−, D+, GND**. Mål efter med et multimeter.
@@ -82,6 +90,15 @@ ESP32-C3 GPIO10 ── 470 Ω ── (+) langt ben  [IR-diode 940 nm]  kort ben 
 Anlægget tager kun imod Follow Me, vip og display via IR – ikke via USB-porten. Placér IR-dioden få millimeter fra anlæggets IR-modtager bag displayet (inde bag frontpanelet), rettet mod modtagerens kuppel og uden at dække vinduet, så fjernbetjeningen stadig virker. Fastgør med varmlim. **Sluk anlægget på strømmen før du åbner det** – hovedprintet har 230 V.
 
 Test: tryk **Lamel ét trin** – anlægget bipper.
+
+### Temperaturfølere til målt COP (valgfrit)
+
+Med to DS18B20-følere måler Qlima Control den varme, anlægget faktisk afgiver: luftmængden (fra databladet efter blæsertrin) × temperaturforskellen mellem udblæsning og indsugning. Sammen med effektmåleren giver det en **målt COP** ved siden af den beregnede.
+
+- **Udblæsning (GPIO5):** i luftstrømmen lige under lamellerne – ikke i direkte kontakt med metal.
+- **Indsugning (GPIO4):** bag filteret i toppen af indedelen.
+- Brug vandtætte DS18B20 med kabel eller TO-92-udgaven med krympeflex. Hver føler skal have en 4,7 kΩ fra data (gul) til 3V3.
+- Firmwaren finder følerne selv – der skal ikke ændres noget. De dukker op som *Udblæsning* og *Indsugning*, og integrationen viser *Varmeeffekt (målt)* og *COP (målt)*.
 
 ### Flash firmwaren
 
@@ -97,7 +114,9 @@ Test: tryk **Lamel ét trin** – anlægget bipper.
 
 ### Opdateringer
 
-Når der kommer en ny firmware her i repoet, viser Home Assistant **"Firmware – opdatering tilgængelig"** på ESP'en. Tryk installér – den henter og installerer selv over WiFi.
+ESP'en tjekker repoet hver 6. time. Med kontakten **"Opdatér automatisk"** (slået til som standard) installerer den selv en ny firmware over WiFi. Slår du den fra, viser Home Assistant i stedet **"Firmware – opdatering tilgængelig"**, og du trykker selv *Installér*. Firmwaren udgives kun, når der faktisk er ændret noget i den.
+
+Integrationen opdateres gennem HACS som alle andre.
 
 ---
 
@@ -111,10 +130,10 @@ Når der kommer en ny firmware her i repoet, viser Home Assistant **"Firmware �
 | Sektion | Felter |
 |---|---|
 | **Anlæg** | navn, ESP i anlægget, model (5225 / 5232 / andet Midea) |
-| **Rumfølere** | rumtemperatur (én eller flere + gennemsnit/vægtet/koldeste/varmeste), fugtighed, udetemperatur, elpris |
+| **Rumfølere** | rumtemperatur (én eller flere + gennemsnit/vægtet/koldeste/varmeste), fugtighed, udetemperatur, elpris (Strømligning, Nord Pool, Energi Data Service, Tibber …) |
 | **Strøm og Shelly** | effektmåler, energimåler, strømkontakt (Shelly-relæ), automatisk genstart, "kører over" W, maks. effekt |
 | **Døre og vinduer** | sensorer, skru ned efter, sluk efter, genoptag efter, skru ned til målet eller minimum |
-| **Styring** | mål ved varme/køl, start- og stop-hysterese, min. kørsel/pause, manuel overstyring |
+| **Styring** | mål ved varme/køl, start- og stop-hysterese, min. kørsel/pause, manuel overstyring, tilstedeværelse og sænkning når I er væk |
 | **Notifikationer** | notify-tjeneste (fx `notify.mobile_app_telefon`), filter-påmindelse |
 | **Avanceret** | termostater der skal pauses, følerfrister |
 
@@ -130,7 +149,10 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Status, Næste skift (+ nedtællinger under Diagnostik) | hvad den gør nu, og hvornår den skifter |
 | Rumtemperatur, Rumfugtighed, Udetemperatur, Anlæggets føler | |
 | Elforbrug, Energi, COP, Varmeeffekt, Varmepris, Pris pr. time | kræver effektmåler/elpris |
-| Varmer, Køler, Dør/vindue åben, Anlæg svarer, Kører uden effekt | binære sensorer |
+| Energi i dag/denne måned, Pris i dag/denne måned | gemmes og overlever genstart |
+| Driftstid i dag, Starter i dag, Afrimninger i dag | afslører om kompressoren tænder og slukker for tit |
+| Udblæsning, Indsugning, Varmeeffekt (målt), COP (målt) | kræver DS18B20-følerne |
+| Varmer, Køler, Afrimer, Dør/vindue åben, Anlæg svarer, Kører uden effekt | binære sensorer |
 | Frigiv, Sving til/fra, Lamel ét trin, Display, Nulstil filtertæller, Genstart anlæg (strøm) | knapper |
 | Follow Me, Bip, Strøm til anlæg, Reagér på døre og vinduer | kontakter |
 | Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
@@ -150,6 +172,15 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 - Anlæggene svarer kun med Mideas korte status – ingen kompressorfrekvens eller effekt fra anlægget selv. Brug en effektmåler.
 
 ---
+
+### Fravær
+
+Kobl en person, en gruppe af personer eller alarmen på under *Styring*. Når ingen er hjemme (eller alarmen er slået til "ude"), sænkes målet ved varme med f.eks. 3 °C og hæves tilsvarende ved køl.
+
+### Hjælp og fejlsøgning
+
+- **Diagnose:** *Indstillinger → Enheder og tjenester → Qlima Control → ⋮ → Download diagnose* – vedhæft filen, når du beder om hjælp.
+- **Reparationer:** Home Assistant viser en advarsel under *Indstillinger → Reparationer*, hvis ESP'ens firmware er for gammel, rumfølerne mangler, eller ESP'en ikke kan findes.
 
 ## Fejlfinding
 

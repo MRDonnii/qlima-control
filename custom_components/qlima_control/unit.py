@@ -31,6 +31,7 @@ from .const import (
     CONF_TEMPERATURE_SENSORS,
     CONF_TEMPERATURE_WEIGHTS,
     DEFAULT_RUNNING_POWER_W,
+    MODEL_AIRFLOW,
     MODEL_P_MAX,
 )
 
@@ -48,6 +49,8 @@ ESP_ROLES: dict[str, tuple[str, tuple[str, ...]]] = {
     "unit_temp": ("sensor", ("Indetemperatur anlæg",)),
     "filter_hours": ("sensor", ("Driftstimer siden filterrens",)),
     "online": ("binary_sensor", ("Anlæg svarer",)),
+    "supply_temp": ("sensor", ("Udblæsningstemperatur",)),
+    "return_temp": ("sensor", ("Indsugningstemperatur",)),
 }
 
 _INVALID = (STATE_UNAVAILABLE, STATE_UNKNOWN, "", None)
@@ -135,6 +138,7 @@ class QlimaUnit:
         self.price_sensor: str | None = config.get(CONF_PRICE_SENSOR) or None
         self.outdoor_sensor: str | None = config.get(CONF_OUTDOOR_SENSOR) or None
         model = config.get(CONF_MODEL, "s5225")
+        self.airflow = MODEL_AIRFLOW.get(model, MODEL_AIRFLOW["custom"])
         self.p_max = float(config.get(CONF_P_MAX) or MODEL_P_MAX.get(model, 1200))
         self.running_power_w = float(config.get(CONF_RUNNING_POWER_W, DEFAULT_RUNNING_POWER_W))
 
@@ -263,3 +267,32 @@ class QlimaUnit:
         if price is None or power is None:
             return None
         return round(price * power / 1000, 3)
+
+    # --- measured heat from the optional DS18B20 sensors -------------------
+    def supply_temperature(self) -> float | None:
+        return self._float(self.entity("supply_temp"))
+
+    def return_temperature(self) -> float | None:
+        return self._float(self.entity("return_temp"))
+
+    def airflow_now(self) -> float:
+        """Indoor-unit airflow (m³/h) for the current fan speed."""
+        state = self.hass.states.get(self.heat_pump) if self.heat_pump else None
+        fan = str(state.attributes.get("fan_mode", "")).lower() if state else ""
+        low, mid, high = self.airflow
+        return {"low": low, "medium": mid, "mid": mid, "high": high, "silent": low * 0.8, "quiet": low * 0.8, "turbo": high * 1.1}.get(fan, mid)
+
+    def measured_heat(self) -> float | None:
+        """Heat delivered (W) = airflow × 0.335 W/(m³/h·K) × (supply − return)."""
+        supply, ret = self.supply_temperature(), self.return_temperature()
+        if supply is None or ret is None:
+            return None
+        if self.pump_mode() not in ("heat", "cool"):
+            return 0.0
+        return round(abs(supply - ret) * self.airflow_now() * 0.335)
+
+    def measured_cop(self) -> float | None:
+        heat, power = self.measured_heat(), self.power()
+        if heat is None or power is None or power < 80 or heat <= 0:
+            return None
+        return round(heat / power, 2)

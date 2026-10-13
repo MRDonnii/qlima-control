@@ -1,16 +1,19 @@
 name: Firmware
 
-# Builds the ESP32-C3 image, attaches it to the release and publishes the
-# web installer + OTA manifest on GitHub Pages. ESPs running the image see the
-# new version as a Home Assistant update and can install it over WiFi.
+# Builds the ESP32-C3 image and publishes the web installer + OTA manifest on
+# GitHub Pages – only when the firmware or the installer page changes. The
+# firmware version is the `project: version:` in esphome/qlima-control-esp32c3.yaml.
+# ESPs running the image see a new version as an update in Home Assistant and
+# install it themselves when "Opdatér automatisk" is on.
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths: ["esphome/**", "docs/**", ".github/workflows/firmware.yml"]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -29,15 +32,16 @@ jobs:
       - name: Version
         id: v
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          [ "${GITHUB_EVENT_NAME}" = "release" ] || TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0-dev)"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          VERSION=$(grep -m1 -E '^ +version: "' esphome/qlima-control-esp32c3.yaml | sed -E 's/.*"(.*)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Firmware $VERSION"
       - name: Build firmware
         run: |
           pip install "esphome==2026.9.1"
-          sed -i "s/^    version: \".*\"/    version: \"${{ steps.v.outputs.version }}\"/" esphome/qlima-control-esp32c3.yaml
           esphome compile esphome/qlima-control-esp32c3.yaml
       - name: Assemble site
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           set -e
           BUILD=$(dirname "$(find esphome/.esphome/build -name firmware.factory.bin | head -1)")
@@ -47,7 +51,7 @@ jobs:
           cp "$BUILD/firmware.ota.bin" _site/firmware/qlima-control-esp32c3.ota.bin
           python3 - <<'PY'
           import hashlib, json, os
-          v = "${{ steps.v.outputs.version }}"
+          v = os.environ["VERSION"]
           ota = open("_site/firmware/qlima-control-esp32c3.ota.bin", "rb").read()
           manifest = {
               "name": "Qlima Control",
@@ -60,18 +64,13 @@ jobs:
                   "ota": {
                       "path": "qlima-control-esp32c3.ota.bin",
                       "md5": hashlib.md5(ota).hexdigest(),
-                      "release_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/v{v}",
+                      "release_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/blob/main/CHANGELOG.md",
                       "summary": f"Qlima Control firmware {v}",
                   },
               }],
           }
           json.dump(manifest, open("_site/firmware/qlima-control-esp32c3.manifest.json", "w"), indent=2)
           PY
-      - name: Attach to release
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" _site/firmware/*.bin _site/firmware/*.manifest.json --clobber
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

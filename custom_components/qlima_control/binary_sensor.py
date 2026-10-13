@@ -25,6 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities.append(OpeningOpen(hass, entry))
     if unit.power_sensor:
         entities.append(NoPower(hass, entry))
+        entities.append(Defrosting(hass, entry))
     async_add_entities(entities)
 
 
@@ -94,3 +95,17 @@ class NoPower(QlimaEntity, BinarySensorEntity):
             return False
         self._since = self._since or time()
         return time() - self._since >= _NO_POWER_SECONDS
+
+
+class Defrosting(QlimaEntity, BinarySensorEntity):
+    """The outdoor unit is defrosting (power drops out while heating in the cold)."""
+
+    _attr_icon = "mdi:snowflake-melt"
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "defrosting")
+
+    @property
+    def is_on(self) -> bool:
+        stats = self.hass.data[DOMAIN].get(f"{self.entry.entry_id}_stats")
+        return bool(stats and stats.defrosting)

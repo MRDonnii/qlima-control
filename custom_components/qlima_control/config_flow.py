@@ -81,6 +81,16 @@ def _entities(domain, device_class=None, multiple=False):
     return selector.EntitySelector(config)
 
 
+PRICE_INTEGRATIONS = ("stromligning", "nordpool", "energidataservice", "tibber", "eloverblik", "entsoe", "octopus_energy")
+
+
+def _price_selector():
+    """Electricity price sensors: known price integrations (e.g. Strømligning) or any monetary sensor."""
+    filters = [{"integration": i, "domain": "sensor"} for i in PRICE_INTEGRATIONS]
+    filters.append({"domain": "sensor", "device_class": "monetary"})
+    return selector.EntitySelector(selector.EntitySelectorConfig(filter=filters))
+
+
 def _number(lo, hi, step, unit=None):
     return selector.NumberSelector(
         selector.NumberSelectorConfig(min=lo, max=hi, step=step, unit_of_measurement=unit, mode=selector.NumberSelectorMode.BOX)
@@ -114,7 +124,7 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             ),
             _opt(CONF_HUMIDITY_SENSORS, d, []): _entities("sensor", "humidity", True),
             _opt(CONF_OUTDOOR_SENSOR, d): _entities("sensor", "temperature"),
-            _opt(CONF_PRICE_SENSOR, d): _entities("sensor"),
+            _opt(CONF_PRICE_SENSOR, d): _price_selector(),
         }
     if name == "power":
         return {
@@ -145,6 +155,8 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             vol.Required(CONF_MIN_OFF_MINUTES, default=d.get(CONF_MIN_OFF_MINUTES, DEFAULT_MIN_OFF_MINUTES)): _number(3, 60, 1, "min"),
             vol.Required(CONF_MANUAL_OVERRIDE_MINUTES, default=d.get(CONF_MANUAL_OVERRIDE_MINUTES, DEFAULT_MANUAL_OVERRIDE_MINUTES)): _number(0, 1440, 5, "min"),
             vol.Required(CONF_SETPOINT_COMPENSATION, default=d.get(CONF_SETPOINT_COMPENSATION, False)): bool,
+            _opt("presence_entity", d): _entities(["person", "group", "binary_sensor", "alarm_control_panel", "input_boolean", "zone"]),
+            vol.Required("away_setback", default=d.get("away_setback", 3)): _number(0, 10, 1, "°C"),
         }
     if name == "notifications":
         return {

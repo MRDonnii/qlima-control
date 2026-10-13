@@ -23,6 +23,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     for key, fn, kind, needs in _MEASUREMENTS:
         if needs(unit):
             entities.append(Measurement(hass, entry, key, fn, kind))
+    stats = hass.data[DOMAIN][f"{entry.entry_id}_stats"]
+    for key, field, kind, needs in _STATS:
+        if needs(unit):
+            entities.append(Measurement(hass, entry, key, lambda u, f=field: stats.value(f), kind))
     async_add_entities(entities)
 
 
@@ -36,6 +40,9 @@ _KINDS = {
     "cost": (SensorDeviceClass.MONETARY, "DKK/h", 2, "mdi:cash-clock"),
     "hours": (SensorDeviceClass.DURATION, UnitOfTime.HOURS, 0, "mdi:air-filter"),
     "energy": (SensorDeviceClass.ENERGY, "kWh", 2, None),
+    "money": (SensorDeviceClass.MONETARY, "DKK", 2, "mdi:cash"),
+    "runtime": (SensorDeviceClass.DURATION, UnitOfTime.HOURS, 1, "mdi:timer-outline"),
+    "count": (None, None, 0, "mdi:counter"),
 }
 _MEASUREMENTS = (
     ("room_temperature", lambda u: u.room_temperature().value, "temp", lambda u: bool(u.temperature_sensors)),
@@ -49,6 +56,20 @@ _MEASUREMENTS = (
     ("heat_price", lambda u: u.heat_price(), "price", lambda u: bool(u.price_sensor)),
     ("cost_per_hour", lambda u: u.cost_per_hour(), "cost", lambda u: bool(u.price_sensor and u.power_sensor)),
     ("filter_hours", lambda u: u.filter_hours(), "hours", lambda u: bool(u.entity("filter_hours"))),
+    ("supply_temperature", lambda u: u.supply_temperature(), "temp", lambda u: bool(u.entity("supply_temp"))),
+    ("return_temperature", lambda u: u.return_temperature(), "temp", lambda u: bool(u.entity("return_temp"))),
+    ("measured_heat_output", lambda u: u.measured_heat(), "power", lambda u: bool(u.entity("supply_temp"))),
+    ("measured_cop", lambda u: u.measured_cop(), "cop", lambda u: bool(u.entity("supply_temp") and u.power_sensor)),
+)
+# From the persisted statistics.
+_STATS = (
+    ("energy_today", "energy_day", "energy", lambda u: bool(u.energy_sensor or u.power_sensor)),
+    ("energy_month", "energy_month", "energy", lambda u: bool(u.energy_sensor or u.power_sensor)),
+    ("cost_today", "cost_day", "money", lambda u: bool((u.energy_sensor or u.power_sensor) and u.price_sensor)),
+    ("cost_month", "cost_month", "money", lambda u: bool((u.energy_sensor or u.power_sensor) and u.price_sensor)),
+    ("runtime_today", "runtime_day", "runtime", lambda u: True),
+    ("starts_today", "starts_day", "count", lambda u: True),
+    ("defrosts_today", "defrosts_day", "count", lambda u: bool(u.power_sensor)),
 )
 
 
@@ -68,8 +89,11 @@ class Measurement(QlimaEntity, SensorEntity):
             self._attr_icon = icon
         if key in ("filter_hours", "energy"):
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        if key in ("energy_today", "energy_month", "runtime_today", "starts_today", "defrosts_today"):
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         if device_class == SensorDeviceClass.MONETARY:
-            self._attr_state_class = None  # HA allows no 'measurement' on money
+            # HA allows no 'measurement' on money; running totals are 'total'.
+            self._attr_state_class = SensorStateClass.TOTAL if kind == "money" else None
 
     @property
     def native_value(self):

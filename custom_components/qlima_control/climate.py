@@ -25,6 +25,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
+    AWAY_STATES,
     CONF_COOL_TARGET,
     CONF_HEAT_PUMP,
     CONF_HEAT_TARGET,
@@ -183,6 +184,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._thermostats = list(cfg.get(CONF_THERMOSTATS_TO_DISABLE, []))
         self._openings = list(cfg.get(CONF_OPENING_SENSORS, []))
         self._openings_enabled = bool(cfg.get("openings_enabled", True))
+        self._presence = cfg.get("presence_entity") or None
+        self._away_setback = float(cfg.get("away_setback", 3))
         self._opening_min_delay = float(
             cfg.get(CONF_OPENING_MIN_DELAY_MINUTES, DEFAULT_OPENING_MIN_DELAY_MINUTES)
         ) * 60
@@ -360,6 +363,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "next_change_timestamp": next_at,
             "heat_pump": self._heat_pump,
             "temperature_sensors": self._sensors,
+            "away": self.is_away(),
+            "effective_heat_target": self._eff_heat(),
             "active_mode": self._active_mode,
             "neutral_mode": self._neutral_mode,
             "pending_mode": self._pending_mode,
@@ -586,7 +591,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 )
             )
 
-        watched = list(dict.fromkeys([*self._sensors, self._heat_pump, *self._openings]))
+        watched = list(dict.fromkeys([*self._sensors, self._heat_pump, *self._openings, *([self._presence] if self._presence else [])]))
         self.async_on_remove(async_track_state_change_event(self.hass, watched, self._state_changed))
         self.async_on_remove(
             async_track_time_interval(
@@ -713,6 +718,17 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self._pending_mode = None
             _LOGGER.info("%s: external heat-pump change started manual override", self.entry.title)
 
+    def is_away(self) -> bool:
+        """Nobody home according to the linked presence entity."""
+        state = self.hass.states.get(self._presence) if self._presence else None
+        return state is not None and state.state in AWAY_STATES
+
+    def _eff_heat(self) -> float:
+        return self._heat_target - (self._away_setback if self.is_away() else 0)
+
+    def _eff_cool(self) -> float:
+        return self._cool_target + (self._away_setback if self.is_away() else 0)
+
     def apply_live_settings(self) -> None:
         """Re-read settings changed from the switch/number entities without a reload."""
         self._load_config()
@@ -830,10 +846,11 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         if self._hvac_mode == HVACMode.OFF or self._opening_stage != OPENING_STAGE_NONE:
             return HVACMode.OFF
         # Start early (small margin), stop late (normal hysteresis).
-        heat_on = temperature <= self._heat_target - self._start_hysteresis
-        heat_off = temperature >= self._heat_target + self._hysteresis
-        cool_on = temperature >= self._cool_target + self._start_hysteresis
-        cool_off = temperature <= self._cool_target - self._hysteresis
+        heat_target, cool_target = self._eff_heat(), self._eff_cool()
+        heat_on = temperature <= heat_target - self._start_hysteresis
+        heat_off = temperature >= heat_target + self._hysteresis
+        cool_on = temperature >= cool_target + self._start_hysteresis
+        cool_off = temperature <= cool_target - self._hysteresis
 
         if self._active_mode == HVACMode.HEAT and not heat_off:
             return HVACMode.HEAT
@@ -1030,7 +1047,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         """The room setpoint itself (uncompensated), within the unit's range."""
         lo = self._neutral_target(HVACMode.HEAT, pump)
         hi = self._neutral_target(HVACMode.COOL, pump)
-        target = self._heat_target if mode == HVACMode.HEAT else self._cool_target
+        target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
         return float(round(max(lo, min(hi, target))))
 
     def _pump_matches_neutral(self) -> bool:
@@ -1159,7 +1176,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             return
         self._neutral_mode = None
         self._last_retarget = time()
-        desired = self._heat_target if mode == HVACMode.HEAT else self._cool_target
+        desired = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
         if self._compensate:
             internal = pump.attributes.get("current_temperature")
             external = self.current_temperature

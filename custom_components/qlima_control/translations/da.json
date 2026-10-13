@@ -22,12 +22,12 @@
               "temperature_mode": "Saml følere som",
               "humidity_sensors": "Fugtighedsfølere",
               "outdoor_sensor": "Udetemperatur",
-              "price_sensor": "Elpris (kr/kWh)"
+              "price_sensor": "Elpris"
             },
             "data_description": {
               "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
               "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
-              "price_sensor": "Giver varmepris og pris pr. time."
+              "price_sensor": "Prissensor fra Strømligning, Nord Pool, Energi Data Service, Tibber eller en anden sensor i kroner. Giver varmepris, pris pr. time og pris i dag/måned."
             }
           },
           "power": {
@@ -67,10 +67,13 @@
               "min_run_minutes": "Min. kørselstid",
               "min_off_minutes": "Min. pause",
               "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
-              "setpoint_compensation": "Setpunkt-kompensation"
+              "setpoint_compensation": "Setpunkt-kompensation",
+              "presence_entity": "Tilstedeværelse (person, gruppe, alarm)",
+              "away_setback": "Sænkning når væk"
             },
             "data_description": {
-              "setpoint_compensation": "Ikke nødvendig med Follow Me."
+              "setpoint_compensation": "Ikke nødvendig med Follow Me.",
+              "presence_entity": "Når I er væk, sænkes målet ved varme (og hæves ved køl)."
             }
           },
           "notifications": {
@@ -142,12 +145,12 @@
           "temperature_mode": "Saml følere som",
           "humidity_sensors": "Fugtighedsfølere",
           "outdoor_sensor": "Udetemperatur",
-          "price_sensor": "Elpris (kr/kWh)"
+          "price_sensor": "Elpris"
         },
         "data_description": {
           "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
           "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
-          "price_sensor": "Giver varmepris og pris pr. time."
+          "price_sensor": "Prissensor fra Strømligning, Nord Pool, Energi Data Service, Tibber eller en anden sensor i kroner. Giver varmepris, pris pr. time og pris i dag/måned."
         }
       },
       "power": {
@@ -187,10 +190,13 @@
           "min_run_minutes": "Min. kørselstid",
           "min_off_minutes": "Min. pause",
           "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
-          "setpoint_compensation": "Setpunkt-kompensation"
+          "setpoint_compensation": "Setpunkt-kompensation",
+          "presence_entity": "Tilstedeværelse (person, gruppe, alarm)",
+          "away_setback": "Sænkning når væk"
         },
         "data_description": {
-          "setpoint_compensation": "Ikke nødvendig med Follow Me."
+          "setpoint_compensation": "Ikke nødvendig med Follow Me.",
+          "presence_entity": "Når I er væk, sænkes målet ved varme (og hæves ved køl)."
         }
       },
       "notifications": {
@@ -346,6 +352,39 @@
       },
       "energy": {
         "name": "Energi"
+      },
+      "energy_today": {
+        "name": "Energi i dag"
+      },
+      "energy_month": {
+        "name": "Energi denne måned"
+      },
+      "cost_today": {
+        "name": "Pris i dag"
+      },
+      "cost_month": {
+        "name": "Pris denne måned"
+      },
+      "runtime_today": {
+        "name": "Driftstid i dag"
+      },
+      "starts_today": {
+        "name": "Starter i dag"
+      },
+      "defrosts_today": {
+        "name": "Afrimninger i dag"
+      },
+      "supply_temperature": {
+        "name": "Udblæsning"
+      },
+      "return_temperature": {
+        "name": "Indsugning"
+      },
+      "measured_heat_output": {
+        "name": "Varmeeffekt (målt)"
+      },
+      "measured_cop": {
+        "name": "COP (målt)"
       }
     },
     "climate": {
@@ -402,6 +441,9 @@
       },
       "no_power": {
         "name": "Kører uden effekt"
+      },
+      "defrosting": {
+        "name": "Afrimer"
       }
     },
     "switch": {
@@ -451,6 +493,20 @@
         "setpoint": "Målet (holder rummet)",
         "minimum": "Minimum (17 °C)"
       }
+    }
+  },
+  "issues": {
+    "old_firmware": {
+      "title": "{name}: ESP-firmwaren er for gammel",
+      "description": "ESP'en i {name} mangler funktionen set_room_temperature, så Follow Me får ingen rumtemperatur. Opdatér firmwaren (web-installeren eller ESPHome)."
+    },
+    "missing_sensors": {
+      "title": "{name}: rumfølere findes ikke",
+      "description": "Disse rumfølere findes ikke: {sensors}. Vælg nye under Konfigurer → Rumfølere."
+    },
+    "no_esp": {
+      "title": "{name}: ESP'en i anlægget blev ikke fundet",
+      "description": "Klimaenheden fra den valgte ESP mangler. Tjek at ESP'en er online og tilføjet i ESPHome, eller vælg den igen under Konfigurer → Anlæg."
     }
   }
 }

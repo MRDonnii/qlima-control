@@ -27,7 +27,7 @@
             "data_description": {
               "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
               "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
-              "price_sensor": "Gives heat price and cost per hour."
+              "price_sensor": "Price sensor from Strømligning, Nord Pool, Energi Data Service, Tibber or another monetary sensor. Gives heat price, cost per hour and cost today/this month."
             }
           },
           "power": {
@@ -67,10 +67,13 @@
               "min_run_minutes": "Minimum run time",
               "min_off_minutes": "Minimum off time",
               "manual_override_minutes": "Manual override (remote) lasts",
-              "setpoint_compensation": "Setpoint compensation"
+              "setpoint_compensation": "Setpoint compensation",
+              "presence_entity": "Presence (person, group, alarm)",
+              "away_setback": "Away setback"
             },
             "data_description": {
-              "setpoint_compensation": "Not needed with Follow Me."
+              "setpoint_compensation": "Not needed with Follow Me.",
+              "presence_entity": "Away lowers the heat target (and raises the cool target)."
             }
           },
           "notifications": {
@@ -147,7 +150,7 @@
         "data_description": {
           "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
           "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
-          "price_sensor": "Gives heat price and cost per hour."
+          "price_sensor": "Price sensor from Strømligning, Nord Pool, Energi Data Service, Tibber or another monetary sensor. Gives heat price, cost per hour and cost today/this month."
         }
       },
       "power": {
@@ -187,10 +190,13 @@
           "min_run_minutes": "Minimum run time",
           "min_off_minutes": "Minimum off time",
           "manual_override_minutes": "Manual override (remote) lasts",
-          "setpoint_compensation": "Setpoint compensation"
+          "setpoint_compensation": "Setpoint compensation",
+          "presence_entity": "Presence (person, group, alarm)",
+          "away_setback": "Away setback"
         },
         "data_description": {
-          "setpoint_compensation": "Not needed with Follow Me."
+          "setpoint_compensation": "Not needed with Follow Me.",
+          "presence_entity": "Away lowers the heat target (and raises the cool target)."
         }
       },
       "notifications": {
@@ -346,6 +352,39 @@
       },
       "energy": {
         "name": "Energy"
+      },
+      "energy_today": {
+        "name": "Energy today"
+      },
+      "energy_month": {
+        "name": "Energy this month"
+      },
+      "cost_today": {
+        "name": "Cost today"
+      },
+      "cost_month": {
+        "name": "Cost this month"
+      },
+      "runtime_today": {
+        "name": "Runtime today"
+      },
+      "starts_today": {
+        "name": "Starts today"
+      },
+      "defrosts_today": {
+        "name": "Defrosts today"
+      },
+      "supply_temperature": {
+        "name": "Supply air"
+      },
+      "return_temperature": {
+        "name": "Return air"
+      },
+      "measured_heat_output": {
+        "name": "Heat output (measured)"
+      },
+      "measured_cop": {
+        "name": "COP (measured)"
       }
     },
     "climate": {
@@ -402,6 +441,9 @@
       },
       "no_power": {
         "name": "Running without power"
+      },
+      "defrosting": {
+        "name": "Defrosting"
       }
     },
     "switch": {
@@ -451,6 +493,20 @@
         "setpoint": "The target (keeps the room)",
         "minimum": "The minimum (17 °C)"
       }
+    }
+  },
+  "issues": {
+    "old_firmware": {
+      "title": "{name}: ESP firmware is too old",
+      "description": "The ESP in {name} does not have the set_room_temperature action, so Follow Me gets no room temperature. Update the firmware (web installer or ESPHome)."
+    },
+    "missing_sensors": {
+      "title": "{name}: room sensors not found",
+      "description": "These room temperature sensors do not exist: {sensors}. Choose new ones under Configure → Room sensors."
+    },
+    "no_esp": {
+      "title": "{name}: the ESP in the unit was not found",
+      "description": "The heat pump climate entity of the chosen ESP is missing. Check that the ESP is online and added in ESPHome, or choose it again under Configure → Unit."
     }
   }
 }

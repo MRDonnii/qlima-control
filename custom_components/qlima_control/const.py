@@ -15,6 +15,12 @@ CONF_MODEL = "model"
 CONF_P_MAX = "p_max"
 CONF_RUNNING_POWER_W = "running_power_w"
 CONF_OPENINGS_ENABLED = "openings_enabled"
+CONF_PRESENCE = "presence_entity"  # person/group/binary_sensor/alarm – away lowers the target
+CONF_AWAY_SETBACK = "away_setback"
+DEFAULT_AWAY_SETBACK = 3
+AWAY_STATES = frozenset({"not_home", "off", "away", "armed_away", "armed_vacation", "0"})
+# Indoor-unit airflow (m³/h) per fan step from the Qlima datasheets.
+MODEL_AIRFLOW = {"s5225": (230, 309, 416), "s5232": (294, 478, 539), "custom": (250, 350, 450)}
 # Settings changed from entities (switch/numbers) apply live, without reloading.
 LIVE_KEYS = frozenset({
     "openings_enabled",
