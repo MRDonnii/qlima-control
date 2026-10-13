@@ -16,21 +16,34 @@
         },
         "sections": {
           "sensors": {
-            "name": "Sensorer",
+            "name": "Rumfølere",
             "data": {
               "temperature_sensors": "Rumtemperatur-følere",
               "temperature_mode": "Saml følere som",
               "humidity_sensors": "Fugtighedsfølere",
-              "power_sensor": "Effektmåler (W)",
-              "energy_sensor": "Energimåler (kWh)",
-              "price_sensor": "Elpris (kr/kWh)",
-              "outdoor_sensor": "Udetemperatur"
+              "outdoor_sensor": "Udetemperatur",
+              "price_sensor": "Elpris (kr/kWh)"
             },
             "data_description": {
               "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
+              "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
+              "price_sensor": "Giver varmepris og pris pr. time."
+            }
+          },
+          "power": {
+            "name": "Strøm og Shelly",
+            "data": {
+              "power_sensor": "Effektmåler (W)",
+              "energy_sensor": "Energimåler (kWh)",
+              "power_switch": "Strømkontakt (fx Shelly)",
+              "auto_power_cycle_minutes": "Genstart automatisk når den ikke har svaret i",
+              "running_power_w": "Kører over",
+              "p_max": "Maks. el-effekt (overstyr)"
+            },
+            "data_description": {
               "power_sensor": "Fx Shelly på anlæggets forsyning. Giver varmer/køler, COP-belastning og varmeeffekt.",
-              "price_sensor": "Giver varmepris og pris pr. time.",
-              "outdoor_sensor": "Valgfri – ellers udedelens egen føler."
+              "power_switch": "Relæet der forsyner anlægget. Giver en strømkontakt og en genstart-knap.",
+              "auto_power_cycle_minutes": "0 = fra. Slukker strømmen i 30 sek., højst én gang i timen."
             }
           },
           "openings": {
@@ -60,20 +73,24 @@
               "setpoint_compensation": "Ikke nødvendig med Follow Me."
             }
           },
-          "advanced": {
-            "name": "Avanceret",
+          "notifications": {
+            "name": "Notifikationer",
             "data": {
               "notify_service": "Notifikation (notify-tjeneste)",
-              "filter_alarm_hours": "Filter-påmindelse efter",
-              "p_max": "Maks. el-effekt (overstyr)",
-              "running_power_w": "Kører over",
-              "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
-              "sensor_stable_seconds": "Føler skal være stabil i",
-              "sensor_loss_grace_seconds": "Frist når følere mangler"
+              "filter_alarm_hours": "Filter-påmindelse efter"
             },
             "data_description": {
               "notify_service": "Fx notify.mobile_app_telefon – anlæg svarer ikke, filter, dør/vindue."
             }
+          },
+          "advanced": {
+            "name": "Avanceret",
+            "data": {
+              "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
+              "sensor_stable_seconds": "Føler skal være stabil i",
+              "sensor_loss_grace_seconds": "Frist når følere mangler"
+            },
+            "data_description": {}
           }
         }
       },
@@ -95,76 +112,105 @@
   "options": {
     "step": {
       "init": {
-        "title": "Qlima Control",
-        "description": "Vælg ESP'en i anlægget og kobl rummets sensorer på. Alt kan ændres senere.",
+        "title": "Indstillinger",
+        "description": "Vælg hvad du vil ændre.",
+        "menu_options": {
+          "device": "Anlæg",
+          "sensors": "Rumfølere",
+          "power": "Strøm og Shelly",
+          "openings": "Døre og vinduer",
+          "control": "Styring",
+          "notifications": "Notifikationer",
+          "advanced": "Avanceret"
+        }
+      },
+      "device": {
+        "title": "Anlæg",
         "data": {
+          "device_id": "ESP i anlægget",
           "model": "Model"
         },
         "data_description": {
+          "device_id": "ESPHome-enheden i anlæggets USB-port.",
           "model": "Bestemmer kompressorens maksimale effekt i COP-modellen."
-        },
-        "sections": {
-          "sensors": {
-            "name": "Sensorer",
-            "data": {
-              "temperature_sensors": "Rumtemperatur-følere",
-              "temperature_mode": "Saml følere som",
-              "humidity_sensors": "Fugtighedsfølere",
-              "power_sensor": "Effektmåler (W)",
-              "energy_sensor": "Energimåler (kWh)",
-              "price_sensor": "Elpris (kr/kWh)",
-              "outdoor_sensor": "Udetemperatur"
-            },
-            "data_description": {
-              "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
-              "power_sensor": "Fx Shelly på anlæggets forsyning. Giver varmer/køler, COP-belastning og varmeeffekt.",
-              "price_sensor": "Giver varmepris og pris pr. time.",
-              "outdoor_sensor": "Valgfri – ellers udedelens egen føler."
-            }
-          },
-          "openings": {
-            "name": "Døre og vinduer",
-            "data": {
-              "opening_sensors": "Døre og vinduer",
-              "opening_min_delay_minutes": "Skru ned efter",
-              "opening_off_delay_minutes": "Sluk efter",
-              "opening_resume_delay_minutes": "Genoptag efter lukket i",
-              "opening_reduce_to": "Skru ned til"
-            },
-            "data_description": {}
-          },
-          "control": {
-            "name": "Styring",
-            "data": {
-              "heat_target": "Mål ved varme",
-              "cool_target": "Mål ved køl",
-              "start_hysteresis": "Start under målet med",
-              "hysteresis": "Stop over målet med",
-              "min_run_minutes": "Min. kørselstid",
-              "min_off_minutes": "Min. pause",
-              "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
-              "setpoint_compensation": "Setpunkt-kompensation"
-            },
-            "data_description": {
-              "setpoint_compensation": "Ikke nødvendig med Follow Me."
-            }
-          },
-          "advanced": {
-            "name": "Avanceret",
-            "data": {
-              "notify_service": "Notifikation (notify-tjeneste)",
-              "filter_alarm_hours": "Filter-påmindelse efter",
-              "p_max": "Maks. el-effekt (overstyr)",
-              "running_power_w": "Kører over",
-              "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
-              "sensor_stable_seconds": "Føler skal være stabil i",
-              "sensor_loss_grace_seconds": "Frist når følere mangler"
-            },
-            "data_description": {
-              "notify_service": "Fx notify.mobile_app_telefon – anlæg svarer ikke, filter, dør/vindue."
-            }
-          }
         }
+      },
+      "sensors": {
+        "title": "Rumfølere",
+        "data": {
+          "temperature_sensors": "Rumtemperatur-følere",
+          "temperature_mode": "Saml følere som",
+          "humidity_sensors": "Fugtighedsfølere",
+          "outdoor_sensor": "Udetemperatur",
+          "price_sensor": "Elpris (kr/kWh)"
+        },
+        "data_description": {
+          "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
+          "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
+          "price_sensor": "Giver varmepris og pris pr. time."
+        }
+      },
+      "power": {
+        "title": "Strøm og Shelly",
+        "data": {
+          "power_sensor": "Effektmåler (W)",
+          "energy_sensor": "Energimåler (kWh)",
+          "power_switch": "Strømkontakt (fx Shelly)",
+          "auto_power_cycle_minutes": "Genstart automatisk når den ikke har svaret i",
+          "running_power_w": "Kører over",
+          "p_max": "Maks. el-effekt (overstyr)"
+        },
+        "data_description": {
+          "power_sensor": "Fx Shelly på anlæggets forsyning. Giver varmer/køler, COP-belastning og varmeeffekt.",
+          "power_switch": "Relæet der forsyner anlægget. Giver en strømkontakt og en genstart-knap.",
+          "auto_power_cycle_minutes": "0 = fra. Slukker strømmen i 30 sek., højst én gang i timen."
+        }
+      },
+      "openings": {
+        "title": "Døre og vinduer",
+        "data": {
+          "opening_sensors": "Døre og vinduer",
+          "opening_min_delay_minutes": "Skru ned efter",
+          "opening_off_delay_minutes": "Sluk efter",
+          "opening_resume_delay_minutes": "Genoptag efter lukket i",
+          "opening_reduce_to": "Skru ned til"
+        },
+        "data_description": {}
+      },
+      "control": {
+        "title": "Styring",
+        "data": {
+          "heat_target": "Mål ved varme",
+          "cool_target": "Mål ved køl",
+          "start_hysteresis": "Start under målet med",
+          "hysteresis": "Stop over målet med",
+          "min_run_minutes": "Min. kørselstid",
+          "min_off_minutes": "Min. pause",
+          "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
+          "setpoint_compensation": "Setpunkt-kompensation"
+        },
+        "data_description": {
+          "setpoint_compensation": "Ikke nødvendig med Follow Me."
+        }
+      },
+      "notifications": {
+        "title": "Notifikationer",
+        "data": {
+          "notify_service": "Notifikation (notify-tjeneste)",
+          "filter_alarm_hours": "Filter-påmindelse efter"
+        },
+        "data_description": {
+          "notify_service": "Fx notify.mobile_app_telefon – anlæg svarer ikke, filter, dør/vindue."
+        }
+      },
+      "advanced": {
+        "title": "Avanceret",
+        "data": {
+          "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
+          "sensor_stable_seconds": "Føler skal være stabil i",
+          "sensor_loss_grace_seconds": "Frist når følere mangler"
+        },
+        "data_description": {}
       },
       "weights": {
         "title": "Vægt på hver føler",
@@ -206,6 +252,9 @@
       },
       "filter_reset": {
         "name": "Nulstil filtertæller"
+      },
+      "power_cycle": {
+        "name": "Genstart anlæg (strøm)"
       }
     },
     "sensor": {
@@ -355,6 +404,9 @@
       },
       "beep": {
         "name": "Bip"
+      },
+      "mains": {
+        "name": "Strøm til anlæg"
       }
     }
   },

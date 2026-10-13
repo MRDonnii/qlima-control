@@ -16,21 +16,34 @@
         },
         "sections": {
           "sensors": {
-            "name": "Sensors",
+            "name": "Room sensors",
             "data": {
               "temperature_sensors": "Room temperature sensors",
               "temperature_mode": "Combine sensors as",
               "humidity_sensors": "Humidity sensors",
-              "power_sensor": "Power meter",
-              "energy_sensor": "Energy meter",
-              "price_sensor": "Electricity price",
-              "outdoor_sensor": "Outdoor temperature"
+              "outdoor_sensor": "Outdoor temperature",
+              "price_sensor": "Electricity price"
             },
             "data_description": {
               "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
+              "price_sensor": "Gives heat price and cost per hour."
+            }
+          },
+          "power": {
+            "name": "Power and Shelly",
+            "data": {
+              "power_sensor": "Power meter",
+              "energy_sensor": "Energy meter",
+              "power_switch": "Supply switch (e.g. Shelly)",
+              "auto_power_cycle_minutes": "Auto-restart when not responding for",
+              "running_power_w": "Running above",
+              "p_max": "Max electrical power (override)"
+            },
+            "data_description": {
               "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
-              "price_sensor": "Gives heat price and cost per hour.",
-              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor."
+              "power_switch": "The relay feeding the unit. Gives a mains switch and a restart button.",
+              "auto_power_cycle_minutes": "0 = off. Cuts the supply for 30 s, at most once an hour."
             }
           },
           "openings": {
@@ -60,20 +73,24 @@
               "setpoint_compensation": "Not needed with Follow Me."
             }
           },
-          "advanced": {
-            "name": "Advanced",
+          "notifications": {
+            "name": "Notifications",
             "data": {
               "notify_service": "Notify service",
-              "filter_alarm_hours": "Filter reminder after",
-              "p_max": "Max electrical power (override)",
-              "running_power_w": "Running above",
-              "thermostats_to_disable": "Pause these thermostats while running",
-              "sensor_stable_seconds": "Sensor must be stable for",
-              "sensor_loss_grace_seconds": "Grace when sensors are missing"
+              "filter_alarm_hours": "Filter reminder after"
             },
             "data_description": {
               "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
             }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "thermostats_to_disable": "Pause these thermostats while running",
+              "sensor_stable_seconds": "Sensor must be stable for",
+              "sensor_loss_grace_seconds": "Grace when sensors are missing"
+            },
+            "data_description": {}
           }
         }
       },
@@ -95,76 +112,105 @@
   "options": {
     "step": {
       "init": {
-        "title": "Qlima Control",
-        "description": "Choose the ESP in the unit and link the room's sensors. Everything can be changed later.",
+        "title": "Settings",
+        "description": "Choose what to change.",
+        "menu_options": {
+          "device": "Unit",
+          "sensors": "Room sensors",
+          "power": "Power and Shelly",
+          "openings": "Doors and windows",
+          "control": "Control",
+          "notifications": "Notifications",
+          "advanced": "Advanced"
+        }
+      },
+      "device": {
+        "title": "Unit",
         "data": {
+          "device_id": "ESP in the unit",
           "model": "Model"
         },
         "data_description": {
+          "device_id": "The ESPHome device plugged into the unit's USB port.",
           "model": "Sets the compressor's maximum power for the COP model."
-        },
-        "sections": {
-          "sensors": {
-            "name": "Sensors",
-            "data": {
-              "temperature_sensors": "Room temperature sensors",
-              "temperature_mode": "Combine sensors as",
-              "humidity_sensors": "Humidity sensors",
-              "power_sensor": "Power meter",
-              "energy_sensor": "Energy meter",
-              "price_sensor": "Electricity price",
-              "outdoor_sensor": "Outdoor temperature"
-            },
-            "data_description": {
-              "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
-              "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
-              "price_sensor": "Gives heat price and cost per hour.",
-              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor."
-            }
-          },
-          "openings": {
-            "name": "Doors and windows",
-            "data": {
-              "opening_sensors": "Doors and windows",
-              "opening_min_delay_minutes": "Turn down after",
-              "opening_off_delay_minutes": "Switch off after",
-              "opening_resume_delay_minutes": "Resume after closed for",
-              "opening_reduce_to": "Turn down to"
-            },
-            "data_description": {}
-          },
-          "control": {
-            "name": "Control",
-            "data": {
-              "heat_target": "Heat target",
-              "cool_target": "Cool target",
-              "start_hysteresis": "Start below target by",
-              "hysteresis": "Stop above target by",
-              "min_run_minutes": "Minimum run time",
-              "min_off_minutes": "Minimum off time",
-              "manual_override_minutes": "Manual override (remote) lasts",
-              "setpoint_compensation": "Setpoint compensation"
-            },
-            "data_description": {
-              "setpoint_compensation": "Not needed with Follow Me."
-            }
-          },
-          "advanced": {
-            "name": "Advanced",
-            "data": {
-              "notify_service": "Notify service",
-              "filter_alarm_hours": "Filter reminder after",
-              "p_max": "Max electrical power (override)",
-              "running_power_w": "Running above",
-              "thermostats_to_disable": "Pause these thermostats while running",
-              "sensor_stable_seconds": "Sensor must be stable for",
-              "sensor_loss_grace_seconds": "Grace when sensors are missing"
-            },
-            "data_description": {
-              "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
-            }
-          }
         }
+      },
+      "sensors": {
+        "title": "Room sensors",
+        "data": {
+          "temperature_sensors": "Room temperature sensors",
+          "temperature_mode": "Combine sensors as",
+          "humidity_sensors": "Humidity sensors",
+          "outdoor_sensor": "Outdoor temperature",
+          "price_sensor": "Electricity price"
+        },
+        "data_description": {
+          "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+          "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
+          "price_sensor": "Gives heat price and cost per hour."
+        }
+      },
+      "power": {
+        "title": "Power and Shelly",
+        "data": {
+          "power_sensor": "Power meter",
+          "energy_sensor": "Energy meter",
+          "power_switch": "Supply switch (e.g. Shelly)",
+          "auto_power_cycle_minutes": "Auto-restart when not responding for",
+          "running_power_w": "Running above",
+          "p_max": "Max electrical power (override)"
+        },
+        "data_description": {
+          "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
+          "power_switch": "The relay feeding the unit. Gives a mains switch and a restart button.",
+          "auto_power_cycle_minutes": "0 = off. Cuts the supply for 30 s, at most once an hour."
+        }
+      },
+      "openings": {
+        "title": "Doors and windows",
+        "data": {
+          "opening_sensors": "Doors and windows",
+          "opening_min_delay_minutes": "Turn down after",
+          "opening_off_delay_minutes": "Switch off after",
+          "opening_resume_delay_minutes": "Resume after closed for",
+          "opening_reduce_to": "Turn down to"
+        },
+        "data_description": {}
+      },
+      "control": {
+        "title": "Control",
+        "data": {
+          "heat_target": "Heat target",
+          "cool_target": "Cool target",
+          "start_hysteresis": "Start below target by",
+          "hysteresis": "Stop above target by",
+          "min_run_minutes": "Minimum run time",
+          "min_off_minutes": "Minimum off time",
+          "manual_override_minutes": "Manual override (remote) lasts",
+          "setpoint_compensation": "Setpoint compensation"
+        },
+        "data_description": {
+          "setpoint_compensation": "Not needed with Follow Me."
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "data": {
+          "notify_service": "Notify service",
+          "filter_alarm_hours": "Filter reminder after"
+        },
+        "data_description": {
+          "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
+        }
+      },
+      "advanced": {
+        "title": "Advanced",
+        "data": {
+          "thermostats_to_disable": "Pause these thermostats while running",
+          "sensor_stable_seconds": "Sensor must be stable for",
+          "sensor_loss_grace_seconds": "Grace when sensors are missing"
+        },
+        "data_description": {}
       },
       "weights": {
         "title": "Weight of each sensor",
@@ -206,6 +252,9 @@
       },
       "filter_reset": {
         "name": "Reset filter counter"
+      },
+      "power_cycle": {
+        "name": "Restart unit (supply)"
       }
     },
     "sensor": {
@@ -355,6 +404,9 @@
       },
       "beep": {
         "name": "Beep"
+      },
+      "mains": {
+        "name": "Supply"
       }
     }
   },

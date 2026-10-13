@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN, PLATFORMS
 from .feeder import RoomFeeder
 from .notify import QlimaNotifier
+from .power import PowerControl
 from .unit import QlimaUnit
 
 
@@ -18,11 +19,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][f"{entry.entry_id}_unit"] = unit
     notifier = QlimaNotifier(hass, entry, unit)
     hass.data[DOMAIN][f"{entry.entry_id}_notifier"] = notifier
+    power = PowerControl(hass, entry, unit)
+    hass.data[DOMAIN][f"{entry.entry_id}_power"] = power
     feeder = RoomFeeder(hass, entry, unit)
     hass.data[DOMAIN][f"{entry.entry_id}_feeder"] = feeder
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     notifier.start()
     feeder.start()
+    power.start()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
 
@@ -37,11 +41,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     notifier = hass.data.get(DOMAIN, {}).get(f"{entry.entry_id}_notifier")
     if notifier is not None:
         notifier.stop()
+    power = hass.data.get(DOMAIN, {}).get(f"{entry.entry_id}_power")
+    if power is not None:
+        power.stop()
     feeder = hass.data.get(DOMAIN, {}).get(f"{entry.entry_id}_feeder")
     if feeder is not None:
         feeder.stop()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        for key in (entry.entry_id, f"{entry.entry_id}_unit", f"{entry.entry_id}_notifier", f"{entry.entry_id}_feeder"):
+        for key in (entry.entry_id, f"{entry.entry_id}_unit", f"{entry.entry_id}_notifier", f"{entry.entry_id}_feeder", f"{entry.entry_id}_power"):
             hass.data.get(DOMAIN, {}).pop(key, None)
     return unloaded

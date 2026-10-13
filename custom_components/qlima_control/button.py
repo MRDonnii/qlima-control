@@ -22,6 +22,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     unit = hass.data[DOMAIN][f"{entry.entry_id}_unit"]
     entities: list[ButtonEntity] = [ReleaseButton(hass, entry)]
     entities += [ProxyButton(hass, entry, role, icon, cat) for role, icon, cat in _PROXIES if unit.entity(role)]
+    if unit.power_switch:
+        entities.append(PowerCycleButton(hass, entry))
     async_add_entities(entities)
 
 
@@ -50,3 +52,21 @@ class ProxyButton(EspProxy, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.hass.services.async_call("button", "press", {"entity_id": self.target}, blocking=True)
+
+
+class PowerCycleButton(QlimaEntity, ButtonEntity):
+    """Cut the unit's supply for 30 s and switch it back on."""
+
+    _attr_icon = "mdi:restart-alert"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "power_cycle")
+
+    def watched(self) -> list[str]:
+        return []
+
+    async def async_press(self) -> None:
+        power = self.hass.data[DOMAIN].get(f"{self.entry.entry_id}_power")
+        if power is not None:
+            self.hass.async_create_task(power.async_power_cycle("button"))

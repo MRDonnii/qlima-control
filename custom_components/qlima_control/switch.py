@@ -20,6 +20,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         )
         if unit.entity(role)
     ]
+    if unit.power_switch:
+        entities.append(MainsSwitch(hass, entry))
     async_add_entities(entities)
 
 
@@ -40,3 +42,27 @@ class ProxySwitch(EspProxy, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self.hass.services.async_call("switch", "turn_off", {"entity_id": self.target}, blocking=True)
+
+
+class MainsSwitch(EspProxy, SwitchEntity):
+    """The relay that feeds the unit (e.g. a Shelly)."""
+
+    _attr_icon = "mdi:power-plug"
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "mains")
+
+    @property
+    def target(self) -> str | None:
+        return self.unit.power_switch
+
+    @property
+    def is_on(self) -> bool | None:
+        state = self.hass.states.get(self.target) if self.target else None
+        return None if state is None else state.state == "on"
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self.hass.services.async_call("homeassistant", "turn_on", {"entity_id": self.target}, blocking=True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": self.target}, blocking=True)

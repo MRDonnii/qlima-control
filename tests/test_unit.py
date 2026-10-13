@@ -164,12 +164,15 @@ async def test_config_flow_creates_entry(hass, esp_device):
     assert result["type"] == "form"
     user_input = {
         "name": "Garagen", "device_id": esp_device.id, "model": "s5225",
-        "sensors": {"temperature_sensors": ["sensor.room_a"], "temperature_mode": "mean", "power_sensor": "sensor.power"},
+        "sensors": {"temperature_sensors": ["sensor.room_a"], "temperature_mode": "mean"},
+        "power": {"power_sensor": "sensor.power", "auto_power_cycle_minutes": 0, "running_power_w": 120},
         "openings": {"opening_sensors": ["binary_sensor.door"], "opening_min_delay_minutes": 5,
                      "opening_off_delay_minutes": 20, "opening_resume_delay_minutes": 10, "opening_reduce_to": "setpoint"},
         "control": {"heat_target": 22, "cool_target": 25, "start_hysteresis": 0.1, "hysteresis": 0.5,
                     "min_run_minutes": 20, "min_off_minutes": 10, "manual_override_minutes": 120, "setpoint_compensation": False},
-        "advanced": {"filter_alarm_hours": 500, "running_power_w": 120, "sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
+        "power": {"auto_power_cycle_minutes": 0, "running_power_w": 120},
+        "notifications": {"filter_alarm_hours": 500},
+        "advanced": {"sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
     }
     with patch("custom_components.qlima_control.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
@@ -191,7 +194,9 @@ async def test_config_flow_rejects_device_without_climate(hass, esp_device):
         "sensors": {"temperature_sensors": ["sensor.room_a"], "temperature_mode": "mean"},
         "openings": {"opening_min_delay_minutes": 5, "opening_off_delay_minutes": 20, "opening_resume_delay_minutes": 10, "opening_reduce_to": "setpoint"},
         "control": {"heat_target": 22, "cool_target": 25, "start_hysteresis": 0.1, "hysteresis": 0.5, "min_run_minutes": 20, "min_off_minutes": 10, "manual_override_minutes": 120, "setpoint_compensation": False},
-        "advanced": {"filter_alarm_hours": 500, "running_power_w": 120, "sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
+        "power": {"auto_power_cycle_minutes": 0, "running_power_w": 120},
+        "notifications": {"filter_alarm_hours": 500},
+        "advanced": {"sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
     })
     assert result["type"] == "form" and result["errors"] == {"device_id": "no_climate"}
 
@@ -227,7 +232,9 @@ async def test_config_flow_weights_step(hass, esp_device):
         "sensors": {"temperature_sensors": ["sensor.room_a", "sensor.room_b"], "temperature_mode": "weighted"},
         "openings": {"opening_min_delay_minutes": 5, "opening_off_delay_minutes": 20, "opening_resume_delay_minutes": 10, "opening_reduce_to": "setpoint"},
         "control": {"heat_target": 22, "cool_target": 25, "start_hysteresis": 0.1, "hysteresis": 0.5, "min_run_minutes": 20, "min_off_minutes": 10, "manual_override_minutes": 120, "setpoint_compensation": False},
-        "advanced": {"filter_alarm_hours": 500, "running_power_w": 120, "sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
+        "power": {"auto_power_cycle_minutes": 0, "running_power_w": 120},
+        "notifications": {"filter_alarm_hours": 500},
+        "advanced": {"sensor_stable_seconds": 120, "sensor_loss_grace_seconds": 300},
     })
     assert result["type"] == "form" and result["step_id"] == "weights"
     with patch("custom_components.qlima_control.async_setup_entry", return_value=True):
@@ -239,3 +246,30 @@ async def test_config_flow_weights_step(hass, esp_device):
 async def test_new_thermostat_takes_over_running_mode(hass, esp_device):
     entry = await _setup(hass, esp_device)
     assert hass.data[DOMAIN][entry.entry_id].hvac_mode == "heat"
+
+
+async def test_options_menu_power_and_restart(hass, esp_device):
+    hass.states.async_set("switch.shelly", "on")
+    entry = await _setup(hass, esp_device)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == "menu" and "power" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "power"})
+    assert result["type"] == "form" and result["step_id"] == "power"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {
+        "power_sensor": "sensor.power", "power_switch": "switch.shelly", "auto_power_cycle_minutes": 15, "running_power_w": 120,
+    })
+    assert result["type"] == "create_entry"
+    await hass.async_block_till_done()
+    assert entry.options["power_switch"] == "switch.shelly"
+    calls = []
+
+    async def record(call):
+        calls.append((call.service, call.data["entity_id"]))
+
+    hass.services.async_register("homeassistant", "turn_off", record)
+    hass.services.async_register("homeassistant", "turn_on", record)
+    power = hass.data[DOMAIN][f"{entry.entry_id}_power"]
+    with patch("custom_components.qlima_control.power.POWER_CYCLE_OFF_SECONDS", 0):
+        await power.async_power_cycle("test")
+    assert calls == [("turn_off", "switch.shelly"), ("turn_on", "switch.shelly")]
+    assert _state(hass, "switch", "mains").state == "on"

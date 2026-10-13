@@ -23,6 +23,7 @@ from .const import (
     CONF_OUTDOOR_SENSOR,
     CONF_P_MAX,
     CONF_POWER_SENSOR,
+    CONF_POWER_SWITCH,
     CONF_PRICE_SENSOR,
     CONF_RUNNING_POWER_W,
     CONF_TEMPERATURE_MODE,
@@ -129,6 +130,7 @@ class QlimaUnit:
         }
         self.humidity_sensors: list[str] = list(config.get(CONF_HUMIDITY_SENSORS) or [])
         self.power_sensor: str | None = config.get(CONF_POWER_SENSOR) or None
+        self.power_switch: str | None = config.get(CONF_POWER_SWITCH) or None
         self.energy_sensor: str | None = config.get(CONF_ENERGY_SENSOR) or None
         self.price_sensor: str | None = config.get(CONF_PRICE_SENSOR) or None
         self.outdoor_sensor: str | None = config.get(CONF_OUTDOOR_SENSOR) or None
@@ -149,6 +151,7 @@ class QlimaUnit:
             *self.temperature_sensors,
             *self.humidity_sensors,
             self.power_sensor,
+            self.power_switch,
             self.energy_sensor,
             self.price_sensor,
             self.outdoor_sensor,

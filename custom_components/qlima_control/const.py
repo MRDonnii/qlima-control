@@ -14,6 +14,9 @@ CONF_OUTDOOR_SENSOR = "outdoor_sensor"
 CONF_MODEL = "model"
 CONF_P_MAX = "p_max"
 CONF_RUNNING_POWER_W = "running_power_w"
+CONF_POWER_SWITCH = "power_switch"  # e.g. the Shelly relay feeding the unit
+CONF_AUTO_POWER_CYCLE_MINUTES = "auto_power_cycle_minutes"  # 0 = off
+POWER_CYCLE_OFF_SECONDS = 30
 CONF_NOTIFY_SERVICE = "notify_service"
 CONF_FILTER_ALARM_HOURS = "filter_alarm_hours"
 CONF_FOLLOW_ME = "follow_me"

@@ -31,7 +31,8 @@ En ESP32-C3 til ca. 30 kr. erstatter WiFi-sticken i anlæggets USB-port, og inte
 - **Rumtermostat** med start/stop-hysterese, min. kørsel/pause og en neutral tomgang i stedet for at slukke og tænde kompressoren.
 - **Flere rumfølere** – gennemsnit, vægtet i %, koldeste eller varmeste. Sendes automatisk til anlægget som Follow Me.
 - **Døre og vinduer**: skru ned efter 5 min, sluk efter 20 min, genoptag efter 10 min lukket – med nedtællinger.
-- **Effektmåler** (fx Shelly): "Varmer"/"Køler", varmeeffekt, COP og alarm hvis anlægget kører uden effekt.
+- **Shelly / effektmåler**: "Varmer"/"Køler", varmeeffekt, COP og alarm hvis anlægget kører uden effekt.
+- **Strømkontakt** (fx Shelly-relæet der forsyner anlægget): tænd/sluk, **Genstart anlæg** (30 sek. uden strøm) og valgfri automatisk genstart, hvis anlægget holder op med at svare.
 - **Elpris**: varmepris pr. kWh og pris pr. time.
 - **COP** fra en fysisk model (Carnot med belastning), kalibreret mod Qlimas SCOP.
 - **Frigiv-knap**, status ("Varmer", "Venter på start", "Dør åben"…) og "Næste skift".
@@ -110,10 +111,14 @@ Når der kommer en ny firmware her i repoet, viser Home Assistant **"Firmware �
 | Sektion | Felter |
 |---|---|
 | **Anlæg** | navn, ESP i anlægget, model (5225 / 5232 / andet Midea) |
-| **Sensorer** | rumtemperatur (én eller flere + gennemsnit/vægtet/koldeste/varmeste), fugtighed, effektmåler, energimåler, elpris, udetemperatur |
+| **Rumfølere** | rumtemperatur (én eller flere + gennemsnit/vægtet/koldeste/varmeste), fugtighed, udetemperatur, elpris |
+| **Strøm og Shelly** | effektmåler, energimåler, strømkontakt (Shelly-relæ), automatisk genstart, "kører over" W, maks. effekt |
 | **Døre og vinduer** | sensorer, skru ned efter, sluk efter, genoptag efter, skru ned til målet eller minimum |
 | **Styring** | mål ved varme/køl, start- og stop-hysterese, min. kørsel/pause, manuel overstyring |
-| **Avanceret** | notifikation (fx `notify.mobile_app_telefon`), filter-påmindelse, maks. effekt, termostater der skal pauses, følerfrister |
+| **Notifikationer** | notify-tjeneste (fx `notify.mobile_app_telefon`), filter-påmindelse |
+| **Avanceret** | termostater der skal pauses, følerfrister |
+
+**Bagefter** kan alt justeres under *Indstillinger → Enheder og tjenester → Qlima Control → Konfigurer*: en menu hvor du vælger én af grupperne ovenfor (også ESP'en og modellen).
 
 Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En føler der er offline udelades, og de andre deler dens vægt.
 
@@ -126,8 +131,8 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Rumtemperatur, Rumfugtighed, Udetemperatur, Anlæggets føler | |
 | COP, Varmeeffekt, Varmepris, Pris pr. time | kræver effektmåler/elpris |
 | Varmer, Køler, Dør/vindue åben, Anlæg svarer, Kører uden effekt | binære sensorer |
-| Frigiv, Sving til/fra, Lamel ét trin, Display, Nulstil filtertæller | knapper |
-| Follow Me, Bip | kontakter |
+| Frigiv, Sving til/fra, Lamel ét trin, Display, Nulstil filtertæller, Genstart anlæg (strøm) | knapper |
+| Follow Me, Bip, Strøm til anlæg | kontakter |
 | Program | anlæggets Eco/Boost/Nat/Frostvagt |
 
 ### Sådan regulerer den
