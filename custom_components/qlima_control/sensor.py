@@ -65,6 +65,8 @@ class Measurement(QlimaEntity, SensorEntity):
             self._attr_icon = icon
         if key == "filter_hours":
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        if device_class == SensorDeviceClass.MONETARY:
+            self._attr_state_class = None  # HA allows no 'measurement' on money
 
     @property
     def native_value(self):
