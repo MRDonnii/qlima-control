@@ -182,6 +182,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._sensors = self.unit.temperature_sensors
         self._thermostats = list(cfg.get(CONF_THERMOSTATS_TO_DISABLE, []))
         self._openings = list(cfg.get(CONF_OPENING_SENSORS, []))
+        self._openings_enabled = bool(cfg.get("openings_enabled", True))
         self._opening_min_delay = float(
             cfg.get(CONF_OPENING_MIN_DELAY_MINUTES, DEFAULT_OPENING_MIN_DELAY_MINUTES)
         ) * 60
@@ -712,7 +713,17 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self._pending_mode = None
             _LOGGER.info("%s: external heat-pump change started manual override", self.entry.title)
 
+    def apply_live_settings(self) -> None:
+        """Re-read settings changed from the switch/number entities without a reload."""
+        self._load_config()
+        if not self._openings_enabled:
+            self._reset_opening_episode()
+        self.async_write_ha_state()
+        self.hass.async_create_task(self._evaluate("settings"))
+
     def _opening_is_open(self) -> bool:
+        if not self._openings_enabled:
+            return False
         return any(
             (state := self.hass.states.get(entity_id)) is not None and state.state == STATE_ON
             for entity_id in self._openings

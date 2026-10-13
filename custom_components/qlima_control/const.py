@@ -14,6 +14,14 @@ CONF_OUTDOOR_SENSOR = "outdoor_sensor"
 CONF_MODEL = "model"
 CONF_P_MAX = "p_max"
 CONF_RUNNING_POWER_W = "running_power_w"
+CONF_OPENINGS_ENABLED = "openings_enabled"
+# Settings changed from entities (switch/numbers) apply live, without reloading.
+LIVE_KEYS = frozenset({
+    "openings_enabled",
+    "opening_min_delay_minutes",
+    "opening_off_delay_minutes",
+    "opening_resume_delay_minutes",
+})
 CONF_POWER_SWITCH = "power_switch"  # e.g. the Shelly relay feeding the unit
 CONF_AUTO_POWER_CYCLE_MINUTES = "auto_power_cycle_minutes"  # 0 = off
 POWER_CYCLE_OFF_SECONDS = 30
@@ -76,7 +84,7 @@ OPENING_STAGE_NONE = "none"
 OPENING_STAGE_MIN = "min"
 OPENING_STAGE_OFF = "off"
 
-PLATFORMS = ["climate", "select", "sensor", "binary_sensor", "button", "switch"]
+PLATFORMS = ["climate", "select", "sensor", "binary_sensor", "button", "switch", "number"]
 
 # Dispatcher signal sent whenever a thermostat writes its state.
 SIGNAL_UPDATE = "qlima_control_update_{}"

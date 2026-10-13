@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+- Power (W) and energy (kWh) from the linked meter (e.g. the Shelly) as the unit's own sensors.
+- "React to doors and windows" switch and three numbers for turn-down, switch-off and resume delays. They apply at once, without reloading.
+
 ## 1.1.1
 - Heat price and cost per hour no longer use the 'measurement' state class (not allowed for monetary sensors).
 

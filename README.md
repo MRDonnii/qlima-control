@@ -129,10 +129,11 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | `climate` | rumtermostaten – brug denne på dine dashboards |
 | Status, Næste skift (+ nedtællinger under Diagnostik) | hvad den gør nu, og hvornår den skifter |
 | Rumtemperatur, Rumfugtighed, Udetemperatur, Anlæggets føler | |
-| COP, Varmeeffekt, Varmepris, Pris pr. time | kræver effektmåler/elpris |
+| Elforbrug, Energi, COP, Varmeeffekt, Varmepris, Pris pr. time | kræver effektmåler/elpris |
 | Varmer, Køler, Dør/vindue åben, Anlæg svarer, Kører uden effekt | binære sensorer |
 | Frigiv, Sving til/fra, Lamel ét trin, Display, Nulstil filtertæller, Genstart anlæg (strøm) | knapper |
-| Follow Me, Bip, Strøm til anlæg | kontakter |
+| Follow Me, Bip, Strøm til anlæg, Reagér på døre og vinduer | kontakter |
+| Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
 | Program | anlæggets Eco/Boost/Nat/Frostvagt |
 
 ### Sådan regulerer den

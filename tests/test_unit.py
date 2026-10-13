@@ -273,3 +273,41 @@ async def test_options_menu_power_and_restart(hass, esp_device):
         await power.async_power_cycle("test")
     assert calls == [("turn_off", "switch.shelly"), ("turn_on", "switch.shelly")]
     assert _state(hass, "switch", "mains").state == "on"
+
+
+async def test_power_and_energy_mirrors(hass, esp_device):
+    hass.states.async_set("sensor.energy", "12.5", {"unit_of_measurement": "kWh"})
+    await _setup(hass, esp_device, energy_sensor="sensor.energy")
+    assert _state(hass, "sensor", "power").state == "600.0"
+    assert _state(hass, "sensor", "energy").state == "12.5"
+
+
+async def test_openings_switch_and_live_delays(hass, esp_device):
+    entry = await _setup(hass, esp_device)
+    thermostat = hass.data[DOMAIN][entry.entry_id]
+    reloads = []
+    orig = hass.config_entries.async_reload
+
+    async def spy(entry_id):
+        reloads.append(entry_id)
+        return await orig(entry_id)
+
+    hass.config_entries.async_reload = spy
+    number = _state(hass, "number", "opening_off_after")
+    assert number.state == "20.0"
+    await hass.services.async_call("number", "set_value", {"entity_id": number.entity_id, "value": 30}, blocking=True)
+    await hass.async_block_till_done()
+    assert entry.options["opening_off_delay_minutes"] == 30
+    assert thermostat._opening_off_delay == 30 * 60
+    assert not reloads  # applied live
+    switch = _state(hass, "switch", "openings_enabled")
+    assert switch.state == "on"
+    hass.states.async_set("binary_sensor.door", "on")
+    await hass.async_block_till_done()
+    assert thermostat._opening_is_open()
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch.entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert not thermostat._opening_is_open()
+    assert thermostat.extra_state_attributes["opening_stage"] == "none"
+    assert _state(hass, "switch", "openings_enabled").state == "off"
+    assert not reloads

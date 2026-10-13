@@ -340,6 +340,12 @@
       },
       "filter_hours": {
         "name": "Timer siden filterrens"
+      },
+      "power": {
+        "name": "Elforbrug"
+      },
+      "energy": {
+        "name": "Energi"
       }
     },
     "climate": {
@@ -407,6 +413,20 @@
       },
       "mains": {
         "name": "Strøm til anlæg"
+      },
+      "openings_enabled": {
+        "name": "Reagér på døre og vinduer"
+      }
+    },
+    "number": {
+      "opening_reduce_after": {
+        "name": "Dør/vindue: skru ned efter"
+      },
+      "opening_off_after": {
+        "name": "Dør/vindue: sluk efter"
+      },
+      "opening_resume_after": {
+        "name": "Dør/vindue: genoptag efter lukket"
       }
     }
   },

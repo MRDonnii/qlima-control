@@ -35,6 +35,7 @@ _KINDS = {
     "price": (SensorDeviceClass.MONETARY, "DKK/kWh", 3, "mdi:cash"),
     "cost": (SensorDeviceClass.MONETARY, "DKK/h", 2, "mdi:cash-clock"),
     "hours": (SensorDeviceClass.DURATION, UnitOfTime.HOURS, 0, "mdi:air-filter"),
+    "energy": (SensorDeviceClass.ENERGY, "kWh", 2, None),
 }
 _MEASUREMENTS = (
     ("room_temperature", lambda u: u.room_temperature().value, "temp", lambda u: bool(u.temperature_sensors)),
@@ -42,6 +43,8 @@ _MEASUREMENTS = (
     ("outdoor_temperature", lambda u: u.outdoor(), "temp", lambda u: bool(u.outdoor_sensor or u.entity("outdoor"))),
     ("unit_temperature", lambda u: u.unit_temperature(), "temp", lambda u: bool(u.entity("unit_temp"))),
     ("cop", lambda u: u.cop(), "cop", lambda u: True),
+    ("power", lambda u: u.power(), "power", lambda u: bool(u.power_sensor)),
+    ("energy", lambda u: u._float(u.energy_sensor), "energy", lambda u: bool(u.energy_sensor)),
     ("heat_output", lambda u: u.heat_output(), "power", lambda u: bool(u.power_sensor)),
     ("heat_price", lambda u: u.heat_price(), "price", lambda u: bool(u.price_sensor)),
     ("cost_per_hour", lambda u: u.cost_per_hour(), "cost", lambda u: bool(u.price_sensor and u.power_sensor)),
@@ -63,7 +66,7 @@ class Measurement(QlimaEntity, SensorEntity):
         self._attr_suggested_display_precision = precision
         if icon:
             self._attr_icon = icon
-        if key == "filter_hours":
+        if key in ("filter_hours", "energy"):
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         if device_class == SensorDeviceClass.MONETARY:
             self._attr_state_class = None  # HA allows no 'measurement' on money

@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, LIVE_KEYS, PLATFORMS
 from .feeder import RoomFeeder
 from .notify import QlimaNotifier
 from .power import PowerControl
@@ -32,7 +32,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Linked sensors may have changed; rebuild everything."""
+    """Apply live settings in place; anything else (linked sensors) rebuilds the entry."""
+    unit = hass.data[DOMAIN].get(f"{entry.entry_id}_unit")
+    old = unit.config if unit is not None else {}
+    new = {**entry.data, **entry.options}
+    changed = {k for k in set(old) | set(new) if old.get(k) != new.get(k)}
+    thermostat = hass.data[DOMAIN].get(entry.entry_id)
+    if changed and changed <= LIVE_KEYS and thermostat is not None:
+        unit.config = new
+        thermostat.apply_live_settings()
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 

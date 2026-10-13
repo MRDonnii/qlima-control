@@ -340,6 +340,12 @@
       },
       "filter_hours": {
         "name": "Hours since filter cleaning"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "energy": {
+        "name": "Energy"
       }
     },
     "climate": {
@@ -407,6 +413,20 @@
       },
       "mains": {
         "name": "Supply"
+      },
+      "openings_enabled": {
+        "name": "React to doors and windows"
+      }
+    },
+    "number": {
+      "opening_reduce_after": {
+        "name": "Door/window: turn down after"
+      },
+      "opening_off_after": {
+        "name": "Door/window: switch off after"
+      },
+      "opening_resume_after": {
+        "name": "Door/window: resume after closed"
       }
     }
   },

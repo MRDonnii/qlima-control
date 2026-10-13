@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 
-from .entity import EspProxy
+from .entity import EspProxy, QlimaEntity
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -22,6 +22,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     ]
     if unit.power_switch:
         entities.append(MainsSwitch(hass, entry))
+    if {**entry.data, **entry.options}.get("opening_sensors"):
+        entities.append(OpeningsSwitch(hass, entry))
     async_add_entities(entities)
 
 
@@ -66,3 +68,29 @@ class MainsSwitch(EspProxy, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": self.target}, blocking=True)
+
+
+class OpeningsSwitch(QlimaEntity, SwitchEntity):
+    """Whether doors/windows turn the unit down and off at all."""
+
+    _attr_icon = "mdi:door-open"
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "openings_enabled")
+
+    def watched(self) -> list[str]:
+        return []
+
+    @property
+    def is_on(self) -> bool:
+        return bool({**self.entry.data, **self.entry.options}.get("openings_enabled", True))
+
+    async def _set(self, value: bool) -> None:
+        self.hass.config_entries.async_update_entry(self.entry, options={**self.entry.options, "openings_enabled": value})
+        self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set(False)
