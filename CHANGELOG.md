@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+- Finds the ESPHome device through `config_entry_id` on Home Assistant 2026.10+ (removes the deprecation warning about `DeviceEntry.config_entries`).
+
 ## 1.3.0 (firmware 1.1.0)
 - Energy and cost today and this month, runtime today, starts today and defrosts today – saved, so they survive restarts.
 - Defrost detection ("Afrimer") from the power pattern in the cold.

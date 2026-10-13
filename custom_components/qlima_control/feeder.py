@@ -26,7 +26,10 @@ def esphome_action(hass: HomeAssistant, device_id: str | None) -> str | None:
     device = dr.async_get(hass).async_get(device_id)
     if device is None:
         return None
-    for entry_id in device.config_entries:
+    # HA 2026.10+ has one config entry per device (config_entry_id); older versions a set.
+    entry_id = getattr(device, "config_entry_id", None)
+    entry_ids = [entry_id] if entry_id else list(device.config_entries)
+    for entry_id in entry_ids:
         entry = hass.config_entries.async_get_entry(entry_id)
         if entry is not None and entry.domain == "esphome":
             name = entry.data.get("device_name") or entry.title
