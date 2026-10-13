@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Qlima Control – installér firmware</title>
+  <link rel="icon" href="images/icon.png">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root{color-scheme:dark;--a:#4fc3ff;--b:#ff8a3d}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 50% 0,#173456,#06121f 70%);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#e6eef7}
+    main{max-width:640px;padding:40px 28px;text-align:center}
+    img{width:120px;height:120px;border-radius:28px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+    h1{margin:22px 0 6px;font-size:34px;letter-spacing:-.02em}
+    .lead{color:#9fb3c8;margin:0 0 28px}
+    esp-web-install-button button{appearance:none;border:0;border-radius:14px;padding:15px 30px;font:700 17px system-ui;color:#fff;background:linear-gradient(90deg,var(--a),#b98cff,var(--b));cursor:pointer;box-shadow:0 10px 30px rgba(79,195,255,.25)}
+    ol{text-align:left;margin:30px auto 0;max-width:520px;color:#c7d5e3}
+    li{margin:8px 0}
+    code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px}
+    a{color:var(--a)}
+    .note{margin-top:26px;font-size:14px;color:#8aa0b6}
+  </style>
+</head>
+<body>
+<main>
+  <img src="images/icon.png" alt="">
+  <h1>Qlima Control</h1>
+  <p class="lead">Lokal styring af Qlima/Midea-varmepumper med en ESP32-C3 i anlæggets USB-port.</p>
+  <esp-web-install-button manifest="firmware/qlima-control-esp32c3.manifest.json">
+    <button slot="activate">Installér på ESP32-C3</button>
+    <span slot="unsupported">Brug Chrome eller Edge på en computer for at installere.</span>
+    <span slot="not-allowed">Siden skal åbnes via https.</span>
+  </esp-web-install-button>
+  <ol>
+    <li>Sæt ESP32-C3'en i computeren med USB-C og tryk <b>Installér</b>.</li>
+    <li>Vælg dit WiFi direkte i installeren – eller forbind senere til netværket <code>Qlima Control</code> (kode <code>qlimacontrol</code>).</li>
+    <li>Byg den ind i anlægget som beskrevet i <a href="https://github.com/MRDonnii/qlima-control#byg-esp32-donglen">vejledningen</a>.</li>
+    <li>Home Assistant finder den selv. Tilføj derefter integrationen <b>Qlima Control</b>.</li>
+  </ol>
+  <p class="note">Web-UI på ESP'en: <code>http://&lt;ip-adresse&gt;</code> · bruger <code>admin</code> · kode <code>qlima</code></p>
+</main>
+</body>
+</html>

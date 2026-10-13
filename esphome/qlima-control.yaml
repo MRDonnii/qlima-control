@@ -1,0 +1,282 @@
+# Qlima Control – fælles firmware-pakke til Qlima/Midea-varmepumper med en ESP32-C3 i USB-porten.
+# https://github.com/MRDonnii/qlima-control
+#
+# Ledninger (USB-A han-stik til anlægget):
+#   Rød   (5V)            -> ESP 5V
+#   Sort  (GND)           -> ESP GND
+#   Hvid  (D-, anlæg TX)  -> ESP GPIO7 (RX, intern pull-up)
+#   Grøn  (D+, anlæg RX)  -> ESP GPIO6 (TX, open-drain)
+#   4,7 kΩ fra grøn til rød – anlægget kræver 5 V-niveau på sin RX
+#   IR-diode (940 nm) + 470 Ω på GPIO10 → GND, placeret ved anlæggets IR-modtager
+#     (Follow Me, auto-vip, lamel-trin, display)
+# Sæt aldrig ESP'ens USB-C i, mens den sidder i anlægget.
+#
+# Rumtemperaturen sendes af Qlima Control-integrationen i Home Assistant
+# (action set_room_temperature) og videresendes til anlægget som Follow Me.
+
+api:
+  actions:
+    - action: set_room_temperature
+      variables:
+        temperature: float
+      then:
+        - lambda: |-
+            const bool changed = isnan(id(room_ext)) || fabsf(id(room_ext) - temperature) >= 0.5f;
+            id(room_ext) = temperature;
+            id(room_at) = millis();
+            if (changed) id(send_follow_me).execute();
+
+web_server:
+  port: 80
+  version: 3
+  local: true
+  auth:
+    type: digest
+    username: admin
+    password: ${web_password}
+
+uart:
+  - id: ac_uart
+    tx_pin:
+      number: GPIO6
+      mode:
+        output: true
+        open_drain: true
+    rx_pin:
+      number: GPIO7
+      mode:
+        input: true
+        pullup: true
+    baud_rate: 9600
+    # Registrerer hvert svar fra anlægget (til "Anlæg svarer")
+    debug:
+      direction: RX
+      after:
+        timeout: 20ms
+      sequence:
+        - lambda: |-
+            if (bytes.size() > 10 && bytes[0] == 0xAA) id(last_rx) = millis();
+
+preferences:
+  flash_write_interval: 15min   # skån flashen – filtertælleren gemmes hvert kvarter
+
+globals:
+  - id: room_ext
+    type: float
+    initial_value: 'NAN'
+  - id: room_at
+    type: uint32_t
+    initial_value: '0'
+  - id: last_rx
+    type: uint32_t
+    initial_value: '0'
+  - id: filter_hours
+    type: float
+    restore_value: true
+    initial_value: '0'
+
+remote_transmitter:
+  id: ir_tx
+  pin: GPIO10
+  carrier_duty_percent: 50%
+  non_blocking: true
+
+climate:
+  - platform: midea
+    id: ac
+    name: Varmepumpe
+    uart_id: ac_uart
+    transmitter_id: ir_tx   # påkrævet for Follow Me og lamel-trin via IR
+    period: 1s
+    timeout: 2s
+    num_attempts: 3
+    autoconf: true
+    beeper: false
+    supported_modes: [HEAT_COOL, COOL, HEAT, DRY, FAN_ONLY]
+    custom_fan_modes: [SILENT, TURBO]
+    supported_presets: [ECO, BOOST, SLEEP]
+    custom_presets: [FREEZE_PROTECTION]   # frostvagt ~8 °C
+    # Lameller styres ikke via USB på Qlima S 52xx (anlægget ignorerer det) – se IR-knapperne
+    supported_swing_modes: []
+    visual:
+      min_temperature: 17 °C   # anlægget ignorerer 16 °C i varme
+      max_temperature: 30 °C
+      temperature_step: 1 °C   # hele grader
+    outdoor_temperature:
+      id: outdoor_temp
+      name: Udetemperatur
+      filters:
+        - delta: 0.5
+    humidity_setpoint:
+      name: Fugtighed setpunkt
+    # Anlægget glemmer Follow Me ved ny tilstand/temperatur – send igen kort efter
+    on_state:
+      - lambda: |-
+          static int last_mode = -1;
+          static float last_target = NAN;
+          const int m = (int) x.mode;
+          const float t = x.target_temperature;
+          if (m != last_mode || !(t == last_target)) {
+            last_mode = m;
+            last_target = t;
+            id(send_follow_me).execute();
+          }
+
+sensor:
+  - platform: template
+    id: room_temp
+    name: Rumtemperatur (modtaget)
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: °C
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    # Sendes af Qlima Control-integrationen (set_room_temperature). Forældet efter 10 min.
+    lambda: |-
+      if (id(room_at) == 0 || millis() - id(room_at) > 600000) return NAN;
+      return id(room_ext);
+  - platform: template
+    name: Indetemperatur anlæg
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: °C
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: 'return id(ac).current_temperature;'
+    filters:
+      - delta: 0.2
+  - platform: template
+    name: Driftstimer siden filterrens
+    icon: mdi:air-filter
+    unit_of_measurement: h
+    state_class: total_increasing
+    accuracy_decimals: 0
+    update_interval: 600s
+    lambda: 'return id(filter_hours);'
+  - platform: wifi_signal
+    name: WiFi signal
+    update_interval: 300s
+    entity_category: diagnostic
+  - platform: uptime
+    name: Oppetid
+    update_interval: 300s
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: template
+    name: Anlæg svarer
+    device_class: connectivity
+    entity_category: diagnostic
+    lambda: 'return id(last_rx) != 0 && (millis() - id(last_rx)) < 120000;'
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IP-adresse
+      entity_category: diagnostic
+  - platform: version
+    name: ESPHome version
+    hide_timestamp: true
+    entity_category: diagnostic
+
+number:
+  - platform: template
+    id: ir_test_code
+    name: IR testkode
+    icon: mdi:numeric
+    entity_category: diagnostic
+    optimistic: true
+    min_value: 0
+    max_value: 255
+    step: 1
+    initial_value: 2
+    mode: box
+
+switch:
+  - platform: template
+    name: Follow Me
+    id: follow_me_on
+    icon: mdi:home-thermometer
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    on_turn_on:
+      - script.execute: send_follow_me
+  - platform: template
+    name: Bip
+    icon: mdi:volume-high
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - midea_ac.beeper_on:
+    turn_off_action:
+      - midea_ac.beeper_off:
+
+button:
+  - platform: template
+    name: Display
+    icon: mdi:monitor
+    on_press:
+      - midea_ac.display_toggle:
+  - platform: template
+    name: Lamel ét trin
+    icon: mdi:arrow-up-down
+    on_press:
+      - midea_ac.swing_step:
+  - platform: template
+    name: Nulstil filtertæller
+    icon: mdi:air-filter
+    entity_category: config
+    on_press:
+      - lambda: 'id(filter_hours) = 0;'
+  # Lameller via IR (kræver IR-diode på GPIO10). Midea-specialkoder, afprøvet på stuen 2026-10-13:
+  #   0xA2 0x01 = lamel ét trin (kort tryk på fjernbetjeningen), 0xA2 0x02 = auto-vip til/fra (langt tryk)
+  - platform: template
+    name: Vip auto til⁄fra
+    icon: mdi:arrow-up-down
+    on_press:
+      - remote_transmitter.transmit_midea:
+          transmitter_id: ir_tx
+          code: [0xA2, 0x02, 0xFF, 0xFF, 0xFF]
+  - platform: template
+    name: IR testkode (Midea A2)
+    icon: mdi:remote
+    entity_category: diagnostic
+    on_press:
+      - remote_transmitter.transmit_midea:
+          transmitter_id: ir_tx
+          code: !lambda |-
+            const uint8_t c = (uint8_t) id(ir_test_code).state;
+            return std::vector<uint8_t>{0xA2, c, 0xFF, 0xFF, 0xFF};
+  - platform: restart
+    name: Genstart dongle
+    entity_category: diagnostic
+  - platform: safe_mode
+    name: Safe mode
+    entity_category: diagnostic
+
+# Follow Me: anlægget regulerer på rumsensoren (kræver IR-diode)
+script:
+  - id: send_follow_me
+    mode: restart
+    then:
+      - delay: 3s
+      - if:
+          condition:
+            lambda: 'return id(follow_me_on).state && id(room_at) != 0 && millis() - id(room_at) < 600000 && id(ac).mode != climate::CLIMATE_MODE_OFF;'
+          then:
+            - midea_ac.follow_me:
+                temperature: !lambda 'return id(room_ext);'
+                use_fahrenheit: false
+                beeper: false
+
+interval:
+  - interval: 60s
+    then:
+      - lambda: |-
+          if (id(ac).mode != climate::CLIMATE_MODE_OFF) id(filter_hours) += 1.0f / 60.0f;
+  - interval: 60s
+    then:
+      - script.execute: send_follow_me

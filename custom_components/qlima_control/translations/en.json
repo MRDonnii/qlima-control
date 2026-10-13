@@ -1,0 +1,384 @@
+{
+  "title": "Qlima Control",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add heat pump",
+        "description": "Choose the ESP in the unit and link the room's sensors. Everything can be changed later.",
+        "data": {
+          "name": "Name",
+          "device_id": "ESP in the unit",
+          "model": "Model"
+        },
+        "data_description": {
+          "device_id": "The ESPHome device plugged into the unit's USB port.",
+          "model": "Sets the compressor's maximum power for the COP model."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Sensors",
+            "data": {
+              "temperature_sensors": "Room temperature sensors",
+              "temperature_mode": "Combine sensors as",
+              "humidity_sensors": "Humidity sensors",
+              "power_sensor": "Power meter",
+              "energy_sensor": "Energy meter",
+              "price_sensor": "Electricity price",
+              "outdoor_sensor": "Outdoor temperature"
+            },
+            "data_description": {
+              "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+              "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
+              "price_sensor": "Gives heat price and cost per hour.",
+              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor."
+            }
+          },
+          "openings": {
+            "name": "Doors and windows",
+            "data": {
+              "opening_sensors": "Doors and windows",
+              "opening_min_delay_minutes": "Turn down after",
+              "opening_off_delay_minutes": "Switch off after",
+              "opening_resume_delay_minutes": "Resume after closed for",
+              "opening_reduce_to": "Turn down to"
+            },
+            "data_description": {}
+          },
+          "control": {
+            "name": "Control",
+            "data": {
+              "heat_target": "Heat target",
+              "cool_target": "Cool target",
+              "start_hysteresis": "Start below target by",
+              "hysteresis": "Stop above target by",
+              "min_run_minutes": "Minimum run time",
+              "min_off_minutes": "Minimum off time",
+              "manual_override_minutes": "Manual override (remote) lasts",
+              "setpoint_compensation": "Setpoint compensation"
+            },
+            "data_description": {
+              "setpoint_compensation": "Not needed with Follow Me."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "notify_service": "Notify service",
+              "filter_alarm_hours": "Filter reminder after",
+              "p_max": "Max electrical power (override)",
+              "running_power_w": "Running above",
+              "thermostats_to_disable": "Pause these thermostats while running",
+              "sensor_stable_seconds": "Sensor must be stable for",
+              "sensor_loss_grace_seconds": "Grace when sensors are missing"
+            },
+            "data_description": {
+              "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
+            }
+          }
+        }
+      },
+      "weights": {
+        "title": "Weight of each sensor",
+        "description": "Give each room sensor a weight in %. The weights are relative – a sensor that is offline is left out and the others share its weight.\n\n{sensors}"
+      }
+    },
+    "error": {
+      "no_climate": "That device has no Qlima/Midea climate entity – is it running the Qlima Control firmware?",
+      "no_temperature": "Choose at least one room temperature sensor.",
+      "off_before_min": "Switch-off must come after turn-down.",
+      "cool_must_exceed_heat": "The cool target must be above the heat target."
+    },
+    "abort": {
+      "already_configured": "This unit is already added."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Qlima Control",
+        "description": "Choose the ESP in the unit and link the room's sensors. Everything can be changed later.",
+        "data": {
+          "model": "Model"
+        },
+        "data_description": {
+          "model": "Sets the compressor's maximum power for the COP model."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Sensors",
+            "data": {
+              "temperature_sensors": "Room temperature sensors",
+              "temperature_mode": "Combine sensors as",
+              "humidity_sensors": "Humidity sensors",
+              "power_sensor": "Power meter",
+              "energy_sensor": "Energy meter",
+              "price_sensor": "Electricity price",
+              "outdoor_sensor": "Outdoor temperature"
+            },
+            "data_description": {
+              "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+              "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
+              "price_sensor": "Gives heat price and cost per hour.",
+              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor."
+            }
+          },
+          "openings": {
+            "name": "Doors and windows",
+            "data": {
+              "opening_sensors": "Doors and windows",
+              "opening_min_delay_minutes": "Turn down after",
+              "opening_off_delay_minutes": "Switch off after",
+              "opening_resume_delay_minutes": "Resume after closed for",
+              "opening_reduce_to": "Turn down to"
+            },
+            "data_description": {}
+          },
+          "control": {
+            "name": "Control",
+            "data": {
+              "heat_target": "Heat target",
+              "cool_target": "Cool target",
+              "start_hysteresis": "Start below target by",
+              "hysteresis": "Stop above target by",
+              "min_run_minutes": "Minimum run time",
+              "min_off_minutes": "Minimum off time",
+              "manual_override_minutes": "Manual override (remote) lasts",
+              "setpoint_compensation": "Setpoint compensation"
+            },
+            "data_description": {
+              "setpoint_compensation": "Not needed with Follow Me."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "notify_service": "Notify service",
+              "filter_alarm_hours": "Filter reminder after",
+              "p_max": "Max electrical power (override)",
+              "running_power_w": "Running above",
+              "thermostats_to_disable": "Pause these thermostats while running",
+              "sensor_stable_seconds": "Sensor must be stable for",
+              "sensor_loss_grace_seconds": "Grace when sensors are missing"
+            },
+            "data_description": {
+              "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
+            }
+          }
+        }
+      },
+      "weights": {
+        "title": "Weight of each sensor",
+        "description": "Give each room sensor a weight in %. The weights are relative – a sensor that is offline is left out and the others share its weight.\n\n{sensors}"
+      }
+    },
+    "error": {
+      "no_climate": "That device has no Qlima/Midea climate entity – is it running the Qlima Control firmware?",
+      "no_temperature": "Choose at least one room temperature sensor.",
+      "off_before_min": "Switch-off must come after turn-down.",
+      "cool_must_exceed_heat": "The cool target must be above the heat target."
+    }
+  },
+  "entity": {
+    "select": {
+      "unit_preset": {
+        "name": "Unit preset",
+        "state": {
+          "none": "Normal",
+          "eco": "Eco",
+          "comfort": "Comfort",
+          "boost": "Boost",
+          "sleep": "Sleep"
+        }
+      }
+    },
+    "button": {
+      "release": {
+        "name": "Release"
+      },
+      "swing_toggle": {
+        "name": "Swing on/off"
+      },
+      "swing_step": {
+        "name": "Louver one step"
+      },
+      "display": {
+        "name": "Display"
+      },
+      "filter_reset": {
+        "name": "Reset filter counter"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "off": "Off",
+          "manual": "Manual override",
+          "opening_off": "Off – door/window open",
+          "opening_reduced": "Turned down – door/window open",
+          "opening_resume_wait": "Waiting to resume",
+          "opening_reduce_wait": "Door/window open",
+          "sensor_lost": "Sensor lost",
+          "start_wait": "Waiting to start",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "drying": "Drying",
+          "fan_only": "Fan only",
+          "idle": "Idle"
+        }
+      },
+      "next_change": {
+        "name": "Next change",
+        "state_attributes": {
+          "event": {
+            "name": "Event",
+            "state": {
+              "manual_override": "Manual override ends",
+              "opening_reduce": "Turn down",
+              "opening_off": "Switch off",
+              "opening_resume": "Resume",
+              "start_allowed": "Start",
+              "min_run": "Minimum run ends",
+              "sensor_loss": "Pause for sensor loss"
+            }
+          }
+        }
+      },
+      "countdown_manual_override": {
+        "name": "Manual override ends"
+      },
+      "countdown_opening_reduce": {
+        "name": "Door/window: turn down at"
+      },
+      "countdown_opening_off": {
+        "name": "Door/window: switch off at"
+      },
+      "countdown_opening_resume": {
+        "name": "Door/window: resume at"
+      },
+      "countdown_start_allowed": {
+        "name": "Start allowed at"
+      },
+      "countdown_min_run": {
+        "name": "Minimum run ends"
+      },
+      "countdown_sensor_loss": {
+        "name": "Sensor loss: pause at"
+      },
+      "room_temperature": {
+        "name": "Room temperature"
+      },
+      "room_humidity": {
+        "name": "Room humidity"
+      },
+      "outdoor_temperature": {
+        "name": "Outdoor temperature"
+      },
+      "unit_temperature": {
+        "name": "Unit sensor"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "heat_output": {
+        "name": "Heat output"
+      },
+      "heat_price": {
+        "name": "Heat price"
+      },
+      "cost_per_hour": {
+        "name": "Cost per hour"
+      },
+      "filter_hours": {
+        "name": "Hours since filter cleaning"
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "status": {
+            "name": "Status",
+            "state": {
+              "off": "Off",
+              "manual": "Manual override",
+              "opening_off": "Off – door/window open",
+              "opening_reduced": "Turned down – door/window open",
+              "opening_resume_wait": "Waiting to resume",
+              "opening_reduce_wait": "Door/window open",
+              "sensor_lost": "Sensor lost",
+              "start_wait": "Waiting to start",
+              "heating": "Heating",
+              "cooling": "Cooling",
+              "drying": "Drying",
+              "fan_only": "Fan only",
+              "idle": "Idle"
+            }
+          },
+          "next_event": {
+            "name": "Next event",
+            "state": {
+              "manual_override": "Manual override ends",
+              "opening_reduce": "Turn down",
+              "opening_off": "Switch off",
+              "opening_resume": "Resume",
+              "start_allowed": "Start",
+              "min_run": "Minimum run ends",
+              "sensor_loss": "Pause for sensor loss"
+            }
+          },
+          "next_change_timestamp": {
+            "name": "Next change"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "heating": {
+        "name": "Heating"
+      },
+      "cooling": {
+        "name": "Cooling"
+      },
+      "unit_online": {
+        "name": "Unit responding"
+      },
+      "opening": {
+        "name": "Door/window open"
+      },
+      "no_power": {
+        "name": "Running without power"
+      }
+    },
+    "switch": {
+      "follow_me": {
+        "name": "Follow Me"
+      },
+      "beep": {
+        "name": "Beep"
+      }
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "s5225": "Qlima S 5225 / SC 5225",
+        "s5232": "Qlima S 5232 / SC 5232",
+        "custom": "Other Midea unit"
+      }
+    },
+    "temperature_mode": {
+      "options": {
+        "mean": "Average",
+        "min": "Coldest",
+        "max": "Warmest",
+        "weighted": "Weighted (%)"
+      }
+    },
+    "opening_reduce_to": {
+      "options": {
+        "setpoint": "The target (keeps the room)",
+        "minimum": "The minimum (17 °C)"
+      }
+    }
+  }
+}

@@ -1,0 +1,87 @@
+name: Firmware
+
+# Builds the ESP32-C3 image, attaches it to the release and publishes the
+# web installer + OTA manifest on GitHub Pages. ESPs running the image see the
+# new version as a Home Assistant update and can install it over WiFi.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Version
+        id: v
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          [ "${GITHUB_EVENT_NAME}" = "release" ] || TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0-dev)"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Build firmware
+        run: |
+          pip install "esphome==2026.9.1"
+          sed -i "s/^    version: \".*\"/    version: \"${{ steps.v.outputs.version }}\"/" esphome/qlima-control-esp32c3.yaml
+          esphome compile esphome/qlima-control-esp32c3.yaml
+      - name: Assemble site
+        run: |
+          set -e
+          BUILD=$(dirname "$(find esphome/.esphome/build -name firmware.factory.bin | head -1)")
+          mkdir -p _site/firmware
+          cp -r docs/* _site/
+          cp "$BUILD/firmware.factory.bin" _site/firmware/qlima-control-esp32c3.factory.bin
+          cp "$BUILD/firmware.ota.bin" _site/firmware/qlima-control-esp32c3.ota.bin
+          python3 - <<'PY'
+          import hashlib, json, os
+          v = "${{ steps.v.outputs.version }}"
+          ota = open("_site/firmware/qlima-control-esp32c3.ota.bin", "rb").read()
+          manifest = {
+              "name": "Qlima Control",
+              "version": v,
+              "home_assistant_domain": "esphome",
+              "new_install_prompt_erase": True,
+              "builds": [{
+                  "chipFamily": "ESP32-C3",
+                  "parts": [{"path": "qlima-control-esp32c3.factory.bin", "offset": 0}],
+                  "ota": {
+                      "path": "qlima-control-esp32c3.ota.bin",
+                      "md5": hashlib.md5(ota).hexdigest(),
+                      "release_url": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/v{v}",
+                      "summary": f"Qlima Control firmware {v}",
+                  },
+              }],
+          }
+          json.dump(manifest, open("_site/firmware/qlima-control-esp32c3.manifest.json", "w"), indent=2)
+          PY
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" _site/firmware/*.bin _site/firmware/*.manifest.json --clobber
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,60 @@
+# Qlima Control – færdigt image til ESP32-C3 (SuperMini m.fl.).
+# Flash via https://mrdonnii.github.io/qlima-control/ eller adoptér i ESPHome.
+#
+# Første opstart: ESP'en laver WiFi-netværket "Qlima Control" (kode: qlimacontrol).
+# Forbind og vælg dit WiFi på siden der åbner (eller http://192.168.4.1).
+# Web-UI bagefter: http://<ip-adresse>  (bruger: admin, kode: qlima)
+# Home Assistant finder den selv (ESPHome) – tilføj derefter Qlima Control.
+
+substitutions:
+  name: qlima-control
+  friendly: Qlima Control
+  web_password: qlima
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly}
+  name_add_mac_suffix: true
+  project:
+    name: mrdonnii.qlima-control
+    version: "1.0.0"
+
+esp32:
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+dashboard_import:
+  package_import_url: github://MRDonnii/qlima-control/esphome/qlima-control-esp32c3.yaml@main
+  import_full_config: false
+
+packages:
+  core: !include qlima-control.yaml
+
+logger:
+  level: INFO
+
+api:
+
+ota:
+  - platform: esphome
+  - platform: http_request
+
+http_request:
+  verify_ssl: true
+
+update:
+  - platform: http_request
+    name: Firmware
+    source: https://mrdonnii.github.io/qlima-control/firmware/qlima-control-esp32c3.manifest.json
+    update_interval: 6h
+
+wifi:
+  output_power: 8.5dB   # mange ESP32-C3 SuperMini kommer ikke på WiFi ved fuld styrke
+  ap:
+    ssid: Qlima Control
+    password: qlimacontrol
+
+captive_portal:
+
+improv_serial:
