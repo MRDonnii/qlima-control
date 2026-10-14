@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.3 (firmware 1.3.0)
+- Firmware: **TX/RX found automatically.** When the white and green wires are the other way round, the ESP gets no answer, swaps TX/RX after 20 s (GPIO matrix, no rewiring) and remembers the way that works for the next start. When neither way answers it gives up after 6 tries and keeps the saved way. New diagnostic *UART-ben*: Normal / Byttet / Søger / Intet svar.
+
 ## 1.7.2
 - **Follow Me is steered instead of the unit's target** (replaces the 1.7.1 nudge): the unit's own target stays put, and the value sent as Follow Me is the target −1 from 0.2 °C below target until the target is reached (full effort, no turning down before), the target itself from there (the unit modulates), and the target +1 from +0.3 °C (off before +0.5 °C) until the room is 0.2 °C below again. Cooling mirrors it. Shown as `follow_me_step` / `follow_me_sent` on the thermostat; the value goes out at once when the step, the target or the mode changes.
 
