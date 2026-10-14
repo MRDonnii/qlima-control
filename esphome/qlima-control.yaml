@@ -28,11 +28,11 @@
 esphome:
   project:
     name: mrdonnii.qlima-control
-    version: "1.3.1"
+    version: "1.3.2"
 
 external_components:
   - source: github://MRDonnii/qlima-control@main
-    components: [midea, qlima_uart]
+    components: [midea]
     refresh: 1h
 
 api:
@@ -56,15 +56,6 @@ web_server:
     username: admin
     password: ${web_password}
 
-# Vender hvid og grøn ledning forkert, finder ESP'en selv ud af det: svarer anlægget
-# ikke inden 20 s, byttes TX/RX, og den retning der virker, huskes til næste opstart.
-qlima_uart:
-  id: qlima_uart_swap
-  uart_id: ac_uart
-  tx_pin: 6
-  rx_pin: 7
-  answered: 'return id(last_rx) != 0;'
-
 uart:
   - id: ac_uart
     tx_pin:
@@ -78,20 +69,14 @@ uart:
         input: true
         pullup: true
     baud_rate: 9600
-    # Registrerer hvert svar fra anlægget (til "Anlæg svarer"). ESP'ens egne forespørgsler
-    # (krop 0x40/0x41) tæller ikke – kommer de tilbage som ekko, svarer anlægget ikke.
+    # Registrerer hvert svar fra anlægget (til "Anlæg svarer")
     debug:
       direction: RX
       after:
         timeout: 20ms
       sequence:
         - lambda: |-
-            for (size_t i = 0; i + 10 < bytes.size();) {
-              if (bytes[i] != 0xAA || bytes[i + 1] < 10) { i++; continue; }
-              const uint8_t body = bytes[i + 10];
-              if (body != 0x40 && body != 0x41) { id(last_rx) = millis(); break; }
-              i += bytes[i + 1] + 1;
-            }
+            if (bytes.size() > 10 && bytes[0] == 0xAA) id(last_rx) = millis();
 
 preferences:
   flash_write_interval: 15min   # skån flashen – filtertælleren gemmes hvert kvarter
@@ -231,16 +216,6 @@ binary_sensor:
     lambda: 'return id(last_rx) != 0 && (millis() - id(last_rx)) < 120000;'
 
 text_sensor:
-  - platform: template
-    name: UART-ben
-    icon: mdi:swap-horizontal
-    entity_category: diagnostic
-    update_interval: 15s
-    lambda: |-
-      auto *u = id(qlima_uart_swap);
-      if (u->gave_up()) return std::string("Intet svar – tjek ledningerne");
-      if (!u->is_found()) return std::string("Søger …");
-      return str_sprintf("%s: TX GPIO%u, RX GPIO%u", u->is_swapped() ? "Byttet" : "Normal", u->tx_gpio(), u->rx_gpio());
   - platform: wifi_info
     ip_address:
       name: IP-adresse

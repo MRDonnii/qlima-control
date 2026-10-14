@@ -86,8 +86,6 @@ Valgfri DS18B20 (målt COP), hver på sit eget ben:
   4,7 kΩ fra gul (data) til 3V3 – én pr. føler
 ```
 
-**Byttet om på hvid og grøn?** Det finder ESP'en selv ud af (firmware 1.3.0+): svarer anlægget ikke, prøver den TX/RX den anden vej og husker den retning, der virker. *UART-ben* viser, hvad den bruger.
-
 - Farverne i USB-kabler passer ikke altid. Set forfra med plastikken nedad er benene i USB-A-stikket fra venstre: **5V, D−, D+, GND**. Mål efter med et multimeter.
 - Anlæggets indgang kræver **5 V-niveau** – derfor kører ESP'ens TX som open-drain med 4,7 kΩ op til 5 V. Uden modstanden svarer anlægget ikke.
 - Bytter du D− og D+, sker der intet slemt – anlægget svarer bare ikke. Byt dem så.

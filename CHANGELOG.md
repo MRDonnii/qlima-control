@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.4 (firmware 1.3.2)
+- Firmware: back to the 1.2.0 firmware (no automatic TX/RX swap, no echo filter) – after the 1.3.x firmware a unit stopped answering. The `qlima_uart` component stays in the repo but is no longer used.
+
 ## 1.7.3 (firmware 1.3.1)
 - Firmware: **TX/RX found automatically.** When the white and green wires are the other way round, the ESP gets no answer, swaps TX/RX after 20 s (GPIO matrix, no rewiring) and remembers the way that works for the next start. When neither way answers it gives up after 6 tries and keeps the saved way. New diagnostic *UART-ben*: Normal / Byttet / Søger / Intet svar.
 - Firmware: *Anlæg svarer* no longer counts the ESP's own requests coming back as an echo (body 0x40/0x41) – it showed "on" while the unit did not answer at all.
