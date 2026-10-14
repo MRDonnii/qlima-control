@@ -533,6 +533,11 @@
       "price_expensive_offset": {
         "name": "Pris: ned når dyrt"
       }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
     }
   },
   "selector": {

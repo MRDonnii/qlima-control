@@ -15,9 +15,6 @@ esphome:
   name: ${name}
   friendly_name: ${friendly}
   name_add_mac_suffix: true
-  project:
-    name: mrdonnii.qlima-control
-    version: "1.2.0"
 
 esp32:
   variant: esp32c3

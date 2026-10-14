@@ -2,7 +2,7 @@ name: Firmware
 
 # Builds the ESP32-C3 image and publishes the web installer + OTA manifest on
 # GitHub Pages – only when the firmware or the installer page changes. The
-# firmware version is the `project: version:` in esphome/qlima-control-esp32c3.yaml.
+# firmware version is the `project: version:` in esphome/qlima-control.yaml.
 # ESPs running the image see a new version as an update in Home Assistant and
 # install it themselves when "Opdatér automatisk" is on.
 
@@ -32,7 +32,7 @@ jobs:
       - name: Version
         id: v
         run: |
-          VERSION=$(grep -m1 -E '^ +version: "' esphome/qlima-control-esp32c3.yaml | sed -E 's/.*"(.*)".*/\1/')
+          VERSION=$(grep -m1 -E '^ +version: "' esphome/qlima-control.yaml | sed -E 's/.*"(.*)".*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Firmware $VERSION"
       - name: Build firmware

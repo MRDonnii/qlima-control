@@ -122,6 +122,8 @@ Med to DS18B20-følere måler Qlima Control den varme, anlægget faktisk afgiver
 
 ESP'en tjekker repoet hver 6. time. Med kontakten **"Opdatér automatisk"** (slået til som standard) installerer den selv en ny firmware over WiFi. Slår du den fra, viser Home Assistant i stedet **"Firmware – opdatering tilgængelig"**, og du trykker selv *Installér*. Firmwaren udgives kun, når der faktisk er ændret noget i den.
 
+Hver Qlima Control-enhed har også en **Firmware**-entitet, der viser hvilken version ESP'en kører, og om der er en nyere udgivelse. *Installér* her bruger ESP'ens egen opdatering – eller ESPHome-dashboardet, hvis du bygger fra din egen yaml. Bygger du selv, så lad være med at sætte `project:` i din yaml; versionen kommer fra den fælles pakke.
+
 Integrationen opdateres gennem HACS som alle andre.
 
 ---
@@ -164,6 +166,7 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
 | Pris: op når billigt, Pris: ned når dyrt | tal (hele grader, 0–2) – ændres med det samme |
 | Prisniveau, Vækning | hvad prisstyringen og vækningen gør lige nu |
+| Firmware | ESP'ens firmwareversion og om den er den nyeste – med *Installér*, når der er en ny |
 | Program | anlæggets Eco/Boost/Nat/Frostvagt – kun dem anlægget tager i den aktuelle tilstand (Normal, når det er slukket; Eco kun ved køl og auto) |
 
 ### Sådan regulerer den

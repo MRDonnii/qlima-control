@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+- **Firmware** entity on every Qlima Control device: the version the ESP runs, the newest released firmware (checked every 6 h) and *Install*, which goes through the ESP's own online update or the ESPHome dashboard.
+- Firmware: the version is set once in the shared package `esphome/qlima-control.yaml`, so ESPs built from your own yaml report the real version. Remove any `project:` block from your own yaml – it overrides the package's version.
+
 ## 1.5.1
 - Unit preset select: Eco is only offered in cool and auto – the Qlima S 5232 answers an Eco request in heat with Eco off (seen on the UART). A preset the unit refuses in a mode is no longer offered in that mode (until Home Assistant restarts).
 

@@ -123,7 +123,7 @@ OPENING_STAGE_NONE = "none"
 OPENING_STAGE_MIN = "min"
 OPENING_STAGE_OFF = "off"
 
-PLATFORMS = ["climate", "select", "sensor", "binary_sensor", "button", "switch", "number"]
+PLATFORMS = ["climate", "select", "sensor", "binary_sensor", "button", "switch", "number", "update"]
 
 # Dispatcher signal sent whenever a thermostat writes its state.
 SIGNAL_UPDATE = "qlima_control_update_{}"

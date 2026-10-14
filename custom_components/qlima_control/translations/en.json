@@ -533,6 +533,11 @@
       "price_expensive_offset": {
         "name": "Price: down when expensive"
       }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
     }
   },
   "selector": {

@@ -22,6 +22,14 @@
 # anlæggets fejlkode og filteralarm og spørger ikke efter effekt, som Qlima aldrig
 # svarer på. Andre Midea-anlæg kan også give servicedata – se qlima-control-servicedata.yaml.
 
+# Firmwarens version står kun her. Home Assistant viser den på enheden, og Qlima
+# Controls "Firmware"-entitet sammenligner den med den nyeste udgivelse – sæt derfor
+# ikke selv project: i din egen yaml.
+esphome:
+  project:
+    name: mrdonnii.qlima-control
+    version: "1.2.0"
+
 external_components:
   - source: github://MRDonnii/qlima-control@main
     components: [midea]
