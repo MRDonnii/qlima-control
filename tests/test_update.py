@@ -69,3 +69,57 @@ async def test_firmware_installs_through_the_esp(hass, esp_device):
     assert entity.supported_features
     await entity.async_install(None, False)
     assert calls == ["update.qlima_test_firmware"]
+
+
+async def test_esp_status_and_diagnostics(hass, esp_device):
+    source = next(iter(hass.config_entries.async_entries("esphome")))
+    registry = er.async_get(hass)
+    for domain, name, object_id in (
+        ("sensor", "WiFi signal", "qlima_test_wifi"),
+        ("sensor", "Oppetid", "qlima_test_oppetid"),
+        ("text_sensor", "IP-adresse", "qlima_test_ip"),
+        ("text_sensor", "ESPHome version", "qlima_test_esphome"),
+    ):
+        platform = "sensor"
+        registry.async_get_or_create(
+            platform, "esphome", f"{MAC}/0/{domain}/{name}", suggested_object_id=object_id,
+            device_id=esp_device.id, config_entry=source,
+        )
+    hass.states.async_set("sensor.qlima_test_wifi", "-58")
+    hass.states.async_set("sensor.qlima_test_oppetid", "7200")
+    hass.states.async_set("sensor.qlima_test_ip", "192.0.2.10")
+    hass.states.async_set("sensor.qlima_test_esphome", "2026.9.1")
+    dr.async_get(hass).async_update_device(esp_device.id, sw_version="1.2.0 (ESPHome 2026.9.1)")
+    with patch.object(q_update.FirmwareUpdate, "_check", return_value=None):
+        await _setup(hass, esp_device)
+
+    status = _state(hass, "sensor", "esp_status")
+    assert status.state == "online"
+    assert status.attributes["firmware"] == "1.2.0"
+    assert status.attributes["esphome"] == "2026.9.1"
+    assert status.attributes["ip"] == "192.0.2.10"
+    assert status.attributes["wifi_signal"] == -58
+    assert status.attributes["uptime_hours"] == 2.0
+    assert status.attributes["mac"] == MAC
+    assert _state(hass, "binary_sensor", "esp_connected").state == "on"
+    assert _state(hass, "sensor", "esp_wifi_signal").state == "-58.0"
+    assert _state(hass, "sensor", "esp_ip_address").state == "192.0.2.10"
+    assert float(_state(hass, "sensor", "esp_uptime").state) == 2.0  # shown in hours
+
+    # A newer release: the status says so.
+    entity = await _entity(hass)
+    entity._latest = "1.3.0"
+    hass.data["qlima_control"]["firmware_latest"] = "1.3.0"
+    hass.states.async_set("sensor.qlima_test_wifi", "-60")
+    await hass.async_block_till_done()
+    assert _state(hass, "sensor", "esp_status").state == "update"
+
+    # The unit stops answering, then the ESP drops off.
+    hass.states.async_set("binary_sensor.qlima_test_svarer", "off")
+    await hass.async_block_till_done()
+    assert _state(hass, "sensor", "esp_status").state == "unit_silent"
+    climate = hass.states.get("climate.qlima_test_varmepumpe")
+    hass.states.async_set("climate.qlima_test_varmepumpe", "unavailable", climate.attributes)
+    await hass.async_block_till_done()
+    assert _state(hass, "sensor", "esp_status").state == "offline"
+    assert _state(hass, "binary_sensor", "esp_connected").state == "off"

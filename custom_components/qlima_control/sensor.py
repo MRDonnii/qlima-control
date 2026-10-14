@@ -5,14 +5,21 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfPower, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import COUNTDOWNS, DOMAIN, SIGNAL_UPDATE, STATUSES
-from .entity import QlimaEntity
+from .entity import EspProxy, QlimaEntity
+from .esp import ESP_STATUSES, esp_info, esp_status
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -31,7 +38,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     for key, field, kind, needs in _STATS:
         if needs(unit):
             entities.append(Measurement(hass, entry, key, lambda u, f=field: stats.value(f), kind))
+    entities.append(EspStatusSensor(hass, entry))
+    entities += [EspSensor(hass, entry, *spec) for spec in _ESP_SENSORS if unit.entity(spec[1])]
     async_add_entities(entities)
+
+
+# Mirrors of the ESP's own diagnostics: key, role, device class, unit.
+_ESP_SENSORS = (
+    ("esp_wifi_signal", "wifi", SensorDeviceClass.SIGNAL_STRENGTH, SIGNAL_STRENGTH_DECIBELS_MILLIWATT),
+    ("esp_uptime", "uptime", SensorDeviceClass.DURATION, UnitOfTime.SECONDS),
+    ("esp_ip_address", "ip", None, None),
+    ("esp_esphome_version", "esphome", None, None),
+)
 
 
 _TEMP = (SensorDeviceClass.TEMPERATURE, UnitOfTemperature.CELSIUS, 1, None)
@@ -248,3 +266,61 @@ class WakeSensor(_ThermostatSensor):
         if wake is None:
             return None
         return {**wake.attributes(), "wakes_today": wake.wakes_today}
+
+
+class EspStatusSensor(QlimaEntity, SensorEntity):
+    """The ESP32 at a glance: connected, unit answering, firmware up to date."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_options = ESP_STATUSES
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "esp_status")
+
+    def watched(self) -> list[str]:
+        roles = ("climate", "online", "wifi", "uptime", "ip", "esphome")
+        return [e for e in (self.unit.entity(r) for r in roles) if e]
+
+    @property
+    def native_value(self) -> str:
+        return esp_status(self.hass, self.unit)
+
+    @property
+    def icon(self) -> str:
+        return {"offline": "mdi:chip-off", "unit_silent": "mdi:lan-disconnect", "update": "mdi:update"}.get(
+            self.native_value, "mdi:chip"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return esp_info(self.hass, self.unit)
+
+
+class EspSensor(EspProxy, SensorEntity):
+    """One of the ESP's diagnostics on the Qlima Control device."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hass, entry, key, role, device_class, unit) -> None:
+        super().__init__(hass, entry, key)
+        self.role = role
+        self._attr_device_class = device_class
+        self._attr_native_unit_of_measurement = unit
+        if device_class == SensorDeviceClass.DURATION:
+            self._attr_suggested_unit_of_measurement = UnitOfTime.HOURS
+            self._attr_suggested_display_precision = 1
+        if device_class is not None:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self):
+        state = self.hass.states.get(self.target) if self.target else None
+        if state is None or state.state in ("unknown", "unavailable", ""):
+            return None
+        if self._attr_device_class is None:
+            return state.state
+        try:
+            return float(state.state)
+        except ValueError:
+            return None

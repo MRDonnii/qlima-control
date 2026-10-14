@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_NOTIFY_SERVICE, DOMAIN
+from .esp import esp_info
 
 TO_REDACT = {CONF_NOTIFY_SERVICE}
 
@@ -28,6 +29,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     return {
         "config": async_redact_data({**entry.data, **entry.options}, TO_REDACT),
         "esp_entities": unit.esp if unit else None,
+        "esp": None if unit is None else {**esp_info(hass, unit), "mac": "**REDACTED**", "ip": "**REDACTED**"},
         "follow_me_action": feeder.action if feeder else None,
         "follow_me_action_available": bool(feeder and feeder.action and hass.services.has_service("esphome", feeder.action)),
         "readings": None if unit is None else {

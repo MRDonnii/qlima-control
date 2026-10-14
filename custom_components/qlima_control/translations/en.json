@@ -433,6 +433,62 @@
           "working": "Working",
           "stalled": "Idling – will wake"
         }
+      },
+      "esp_status": {
+        "name": "ESP32 status",
+        "state": {
+          "online": "Connected",
+          "unit_silent": "Unit not answering",
+          "update": "New firmware ready",
+          "offline": "Not connected"
+        },
+        "state_attributes": {
+          "firmware": {
+            "name": "Firmware"
+          },
+          "newest_firmware": {
+            "name": "Newest firmware"
+          },
+          "firmware_up_to_date": {
+            "name": "Firmware up to date"
+          },
+          "esphome": {
+            "name": "ESPHome"
+          },
+          "ip": {
+            "name": "IP address"
+          },
+          "mac": {
+            "name": "MAC"
+          },
+          "wifi_signal": {
+            "name": "Wi-Fi signal (dBm)"
+          },
+          "uptime_hours": {
+            "name": "Uptime (h)"
+          },
+          "unit_responding": {
+            "name": "Unit answering"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "name": {
+            "name": "Name"
+          }
+        }
+      },
+      "esp_wifi_signal": {
+        "name": "ESP32 Wi-Fi signal"
+      },
+      "esp_uptime": {
+        "name": "ESP32 uptime"
+      },
+      "esp_ip_address": {
+        "name": "ESP32 IP address"
+      },
+      "esp_esphome_version": {
+        "name": "ESP32 ESPHome version"
       }
     },
     "climate": {
@@ -492,6 +548,9 @@
       },
       "defrosting": {
         "name": "Defrosting"
+      },
+      "esp_connected": {
+        "name": "ESP32 connected"
       }
     },
     "switch": {

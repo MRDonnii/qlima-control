@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-import re
 from typing import Any
 
 from homeassistant.components.update import (
@@ -17,9 +16,11 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import CONF_DEVICE
+from .const import CONF_DEVICE, DOMAIN, SIGNAL_UPDATE
+from .esp import LATEST_FIRMWARE, firmware_version, newer
 from .entity import QlimaEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,19 +28,6 @@ _LOGGER = logging.getLogger(__name__)
 MANIFEST_URL = "https://mrdonnii.github.io/qlima-control/firmware/qlima-control-esp32c3.manifest.json"
 RELEASES_URL = "https://github.com/MRDonnii/qlima-control/releases"
 _CHECK_EVERY = timedelta(hours=6)
-_VERSION = re.compile(r"^\s*v?(\d+(?:\.\d+)+)")
-
-
-def firmware_version(sw_version: str | None) -> str | None:
-    """The project version ESPHome reports as "1.2.0 (ESPHome 2026.9.1)"."""
-    if not sw_version or sw_version.startswith("ESPHome"):
-        return None
-    match = _VERSION.match(sw_version)
-    return match.group(1) if match else None
-
-
-def _key(version: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in version.split("."))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
@@ -60,7 +48,7 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry, "firmware")
-        self._latest: str | None = None
+        self._latest: str | None = hass.data.get(DOMAIN, {}).get(LATEST_FIRMWARE)
 
     @property
     def _device_id(self) -> str | None:
@@ -92,11 +80,8 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
         installed = self.installed_version
         if self._latest is None or installed is None:
             return installed
-        try:
-            # A local build newer than the release counts as up to date.
-            return self._latest if _key(self._latest) > _key(installed) else installed
-        except ValueError:
-            return self._latest
+        # A local build newer than the release counts as up to date.
+        return self._latest if newer(self._latest, installed) else installed
 
     @property
     def supported_features(self) -> UpdateEntityFeature:
@@ -134,7 +119,9 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
             return
         if version and version != self._latest:
             self._latest = version
+            self.hass.data.setdefault(DOMAIN, {})[LATEST_FIRMWARE] = version
             self.async_write_ha_state()
+            async_dispatcher_send(self.hass, SIGNAL_UPDATE.format(self.entry.entry_id))
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

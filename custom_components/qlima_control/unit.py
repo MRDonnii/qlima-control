@@ -62,6 +62,11 @@ ESP_ROLES: dict[str, tuple[str, tuple[str, ...]]] = {
     "error_code": ("sensor", ("Fejlkode",)),
     "filter_alert": ("binary_sensor", ("Filteralarm",)),
     "service_data": ("text_sensor", ("Servicedata",)),
+    # The ESP itself
+    "wifi": ("sensor", ("WiFi signal",)),
+    "uptime": ("sensor", ("Oppetid",)),
+    "ip": ("text_sensor", ("IP-adresse",)),
+    "esphome": ("text_sensor", ("ESPHome version",)),
 }
 
 _INVALID = (STATE_UNAVAILABLE, STATE_UNKNOWN, "", None)

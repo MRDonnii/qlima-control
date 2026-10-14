@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .entity import QlimaEntity
+from .esp import connected
 
 # Keep "heating" on through short power dips (defrost, compressor ramps).
 _RUN_HOLD_SECONDS = 90
@@ -20,7 +21,7 @@ _NO_POWER_SECONDS = 600
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     unit = hass.data[DOMAIN][f"{entry.entry_id}_unit"]
-    entities = [Running(hass, entry, "heating", "heat"), Running(hass, entry, "cooling", "cool"), Online(hass, entry)]
+    entities = [Running(hass, entry, "heating", "heat"), Running(hass, entry, "cooling", "cool"), Online(hass, entry), EspConnected(hass, entry)]
     if {**entry.data, **entry.options}.get("opening_sensors"):
         entities.append(OpeningOpen(hass, entry))
     if unit.power_sensor:
@@ -58,6 +59,24 @@ class Online(QlimaEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self.unit.online()
+
+
+class EspConnected(QlimaEntity, BinarySensorEntity):
+    """The ESP32 is connected to Home Assistant."""
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "esp_connected")
+
+    def watched(self) -> list[str]:
+        climate = self.unit.entity("climate")
+        return [climate] if climate else []
+
+    @property
+    def is_on(self) -> bool:
+        return connected(self.hass, self.unit)
 
 
 class OpeningOpen(QlimaEntity, BinarySensorEntity):

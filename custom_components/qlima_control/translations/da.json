@@ -433,6 +433,62 @@
           "working": "Arbejder",
           "stalled": "Slumrer – vækkes"
         }
+      },
+      "esp_status": {
+        "name": "ESP32-status",
+        "state": {
+          "online": "Forbundet",
+          "unit_silent": "Anlægget svarer ikke",
+          "update": "Ny firmware klar",
+          "offline": "Ikke forbundet"
+        },
+        "state_attributes": {
+          "firmware": {
+            "name": "Firmware"
+          },
+          "newest_firmware": {
+            "name": "Nyeste firmware"
+          },
+          "firmware_up_to_date": {
+            "name": "Firmware er nyeste"
+          },
+          "esphome": {
+            "name": "ESPHome"
+          },
+          "ip": {
+            "name": "IP-adresse"
+          },
+          "mac": {
+            "name": "MAC"
+          },
+          "wifi_signal": {
+            "name": "WiFi-signal (dBm)"
+          },
+          "uptime_hours": {
+            "name": "Oppetid (t)"
+          },
+          "unit_responding": {
+            "name": "Anlægget svarer"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "name": {
+            "name": "Navn"
+          }
+        }
+      },
+      "esp_wifi_signal": {
+        "name": "ESP32 WiFi-signal"
+      },
+      "esp_uptime": {
+        "name": "ESP32 oppetid"
+      },
+      "esp_ip_address": {
+        "name": "ESP32 IP-adresse"
+      },
+      "esp_esphome_version": {
+        "name": "ESP32 ESPHome-version"
       }
     },
     "climate": {
@@ -492,6 +548,9 @@
       },
       "defrosting": {
         "name": "Afrimer"
+      },
+      "esp_connected": {
+        "name": "ESP32 forbundet"
       }
     },
     "switch": {

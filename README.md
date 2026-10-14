@@ -166,6 +166,8 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
 | Pris: op når billigt, Pris: ned når dyrt | tal (hele grader, 0–2) – ændres med det samme |
 | Prisniveau, Vækning | hvad prisstyringen og vækningen gør lige nu |
+| ESP32-status | Forbundet / Anlægget svarer ikke / Ny firmware klar / Ikke forbundet – med firmware, ESPHome, IP, MAC, WiFi og oppetid |
+| ESP32 forbundet, WiFi-signal, IP-adresse, oppetid, ESPHome-version | ESP'ens egen diagnostik samlet på Qlima Control-enheden |
 | Firmware | ESP'ens firmwareversion og om den er den nyeste – med *Installér*, når der er en ny |
 | Program | anlæggets Eco/Boost/Nat/Frostvagt – kun dem anlægget tager i den aktuelle tilstand (Normal, når det er slukket; Eco kun ved køl og auto) |
 

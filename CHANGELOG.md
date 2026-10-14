@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.0
+- **ESP32 status** on every Qlima Control device: *Connected*, *Unit not answering*, *New firmware ready* or *Not connected*, with firmware, newest firmware, ESPHome version, IP, MAC, Wi-Fi signal, uptime and whether the unit answers as attributes.
+- The ESP's own diagnostics on the Qlima Control device: *ESP32 connected*, *Wi-Fi signal*, *IP address*, *uptime* and *ESPHome version*.
+- Diagnostics download includes the ESP's status (IP and MAC redacted).
+
 ## 1.6.0
 - **Firmware** entity on every Qlima Control device: the version the ESP runs, the newest released firmware (checked every 6 h) and *Install*, which goes through the ESP's own online update or the ESPHome dashboard.
 - Firmware: the version is set once in the shared package `esphome/qlima-control.yaml`, so ESPs built from your own yaml report the real version. Remove any `project:` block from your own yaml – it overrides the package's version.
