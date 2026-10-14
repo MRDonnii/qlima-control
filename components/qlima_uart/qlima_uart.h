@@ -29,6 +29,9 @@ class UartAutoSwap : public Component {
 
   /// True when TX/RX run the other way round than wired by the book.
   bool is_swapped() const { return this->swapped_; }
+  /// The GPIOs in use right now.
+  uint8_t tx_gpio() const { return this->swapped_ ? this->rx_ : this->tx_; }
+  uint8_t rx_gpio() const { return this->swapped_ ? this->tx_ : this->rx_; }
   /// True once the unit answered with the current pins.
   bool is_found() const { return this->found_; }
   /// True when the unit answered on neither way and the search stopped.
