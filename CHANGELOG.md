@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.1
+- Unit preset select: Eco is only offered in cool and auto – the Qlima S 5232 answers an Eco request in heat with Eco off (seen on the UART). A preset the unit refuses in a mode is no longer offered in that mode (until Home Assistant restarts).
+
 ## 1.5.0 (firmware 1.2.0)
 - **The unit holds the target itself** (new setting *Regulation*, default): with Follow Me on, the unit gets the room target and regulates on the room temperature – no more on/off hysteresis and no idling at 17 °C when the room is warm. Only an open door/window turns it down (always to the minimum), and only a long-open one switches it off. While Follow Me is off or no room temperature exists, the thermostat with hysteresis and neutral idle takes over as before. *Regulation → The thermostat* keeps the old behaviour.
 - Target, price and away changes reach the unit at once; the thermostat shows *idle* while the unit holds the target without running.

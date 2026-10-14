@@ -83,7 +83,7 @@ async def test_unit_preset_select_offers_what_the_mode_takes(hass, esp_device):
     await hass.async_block_till_done()
     select = _state(hass, "select", "unit_preset")
     entity = next(e for e in hass.data["select"].entities if e.entity_id == select.entity_id)
-    assert entity.options == ["none", "boost", "eco", "sleep", "Freeze Protection"]
+    assert entity.options == ["none", "boost", "sleep", "Freeze Protection"]  # no Eco in heat
     hass.states.async_set(pump, "cool", attrs)
     assert entity.options == ["none", "boost", "eco", "sleep"]
     hass.states.async_set(pump, "fan_only", attrs)
@@ -101,8 +101,12 @@ async def test_unit_preset_select_offers_what_the_mode_takes(hass, esp_device):
 
     hass.services.async_register("climate", "set_preset_mode", ignore)
     with patch.object(q_select, "_CONFIRM_SECONDS", 1), pytest.raises(HomeAssistantError):
-        await entity.async_select_option("eco")
-    assert calls == ["eco"]
+        await entity.async_select_option("boost")
+    assert calls == ["boost"]
+    assert "boost" not in entity.options  # refused in heat: not offered again
+    hass.states.async_set(pump, "cool", attrs)
+    assert "boost" in entity.options
+    hass.states.async_set(pump, "heat", attrs)
 
     async def accept(call):
         hass.states.async_set(pump, "heat", {**attrs, "preset_mode": call.data["preset_mode"]})

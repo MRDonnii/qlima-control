@@ -24,7 +24,7 @@ En ESP32-C3 til ca. 30 kr. erstatter WiFi-sticken i anlæggets USB-port, og inte
 - Auto-vip, lamel ét trin og display til/fra via IR – præcis som fjernbetjeningen.
 - Udetemperatur fra udedelen, anlæggets egen føler, filtertimer og "anlæg svarer".
 - Anlæggets **fejlkode** og **filteralarm**.
-- Kommandoer der kommer tæt efter hinanden, går ikke tabt, og Eco kan også sendes i varme.
+- Kommandoer der kommer tæt efter hinanden, går ikke tabt.
 - Valgfri pakke til andre Midea-anlæg: anlæggets **servicedata** (kompressorens frekvens, spoler, afrimning, blæsere, udedelens effekt). Qlima S 5225/5232 svarer ikke på den.
 - **Lokalt web-UI** på `http://<ip>` til styring og status – virker også uden Home Assistant.
 - WiFi-opsætning uden kode: ESP'en laver sit eget netværk første gang.
@@ -164,7 +164,7 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
 | Pris: op når billigt, Pris: ned når dyrt | tal (hele grader, 0–2) – ændres med det samme |
 | Prisniveau, Vækning | hvad prisstyringen og vækningen gør lige nu |
-| Program | anlæggets Eco/Boost/Nat/Frostvagt – kun dem anlægget tager i den aktuelle tilstand (Normal, når det er slukket) |
+| Program | anlæggets Eco/Boost/Nat/Frostvagt – kun dem anlægget tager i den aktuelle tilstand (Normal, når det er slukket; Eco kun ved køl og auto) |
 
 ### Sådan regulerer den
 

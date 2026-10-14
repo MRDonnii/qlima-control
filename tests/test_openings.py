@@ -329,6 +329,11 @@ async def test_unit_preset_select(hass, clock):
     sel = ids[0]
     state = hass.states.get(sel)
     assert state.state == "comfort", (sel, state)
+    assert "eco" not in hass.states.get(sel).attributes["options"]  # Eco is cool/auto only
+    clock.advance(3)
+    pump.state = "cool"
+    pump.publish()
+    await hass.async_block_till_done()
     await hass.services.async_call(
         "select", "select_option",
         {"entity_id": sel, "option": "eco"}, blocking=True,

@@ -12,10 +12,12 @@ from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
 
-# Unit modes in which each Midea preset is sent (the firmware drops it otherwise).
-# Presets not listed here are offered in every mode except off.
+# Unit modes in which each Midea preset is offered. Eco is cool/auto only: the Qlima
+# S 5232 answers an Eco request in heat with Eco off (tested 2026-10-14). Presets not
+# listed are offered in every mode except off; a preset the unit refuses in a mode is
+# not offered in that mode again (until Home Assistant restarts).
 _PRESET_MODES: dict[str, tuple[str, ...]] = {
-    "eco": ("cool", "heat_cool", "heat"),
+    "eco": ("cool", "heat_cool"),
     "boost": ("cool", "heat"),
     "sleep": ("cool", "heat_cool", "heat"),
     "Freeze Protection": ("heat",),
@@ -39,6 +41,7 @@ class UnitPresetSelect(SelectEntity):
         self.hass = hass
         self.entry = entry
         self._attr_unique_id = f"{entry.entry_id}_unit_preset"
+        self._refused: set[tuple[str, str]] = set()
         self._attr_device_info = {"identifiers": {(DOMAIN, entry.entry_id)}}
 
     @property
@@ -72,7 +75,11 @@ class UnitPresetSelect(SelectEntity):
         mode = self._mode()
         if mode in (None, "off", "unavailable", "unknown"):
             return [o for o in options if o == _NONE] or options[:1]
-        return [o for o in options if o == _NONE or mode in _PRESET_MODES.get(o, (mode,))]
+        return [
+            o
+            for o in options
+            if o == _NONE or (mode in _PRESET_MODES.get(o, (mode,)) and (o, mode) not in self._refused)
+        ]
 
     @property
     def current_option(self) -> str | None:
@@ -101,10 +108,14 @@ class UnitPresetSelect(SelectEntity):
             context=self._context,
         )
         # The unit answers with its real state: tell the user when it did not take the preset.
+        mode = self._mode()
         for _ in range(_CONFIRM_SECONDS * 2):
             if self._attr("preset_mode") == option:
                 return
             await asyncio.sleep(0.5)
+        if option != _NONE and mode:
+            self._refused.add((option, mode))
+            self.async_write_ha_state()
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="preset_not_accepted",
