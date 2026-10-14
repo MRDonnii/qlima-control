@@ -38,6 +38,7 @@ from .const import (
     CONF_OPENING_MIN_DELAY_MINUTES,
     CONF_OPENING_OFF_DELAY_MINUTES,
     CONF_OPENING_REDUCE_TO,
+    CONF_REGULATION,
     CONF_OPENING_RESUME_DELAY_MINUTES,
     CONF_SENSOR_STABLE_SECONDS,
     CONF_SENSOR_LOSS_GRACE_SECONDS,
@@ -62,11 +63,13 @@ from .const import (
     DEFAULT_OPENING_MIN_DELAY_MINUTES,
     DEFAULT_OPENING_OFF_DELAY_MINUTES,
     DEFAULT_OPENING_REDUCE_TO,
+    DEFAULT_REGULATION,
     DEFAULT_OPENING_RESUME_DELAY_MINUTES,
     DEFAULT_SENSOR_STABLE_SECONDS,
     DEFAULT_SENSOR_LOSS_GRACE_SECONDS,
     DOMAIN,
     OPENING_REDUCE_SETPOINT,
+    REGULATION_UNIT,
     OPENING_STAGE_MIN,
     OPENING_STAGE_NONE,
     OPENING_STAGE_OFF,
@@ -89,6 +92,8 @@ _RETARGET_SECONDS = 300
 # previous one is still waiting for the unit's reply, so pump commands are
 # serialised with a gap between them.
 _PUMP_COMMAND_GAP_SECONDS = 3
+# Evaluations that come from a target change and must reach the unit at once.
+_TARGET_REASONS = ("target_change", "price", "resume_auto", "release", "settings", "thermostat_mode")
 # Modes passed straight to the unit without temperature regulation.
 _DIRECT_MODES = (HVACMode.DRY, HVACMode.FAN_ONLY)
 _SWING_HORIZONTAL = getattr(ClimateEntityFeature, "SWING_HORIZONTAL_MODE", None)
@@ -221,6 +226,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         ) * 60
         self._compensate = bool(cfg.get(CONF_SETPOINT_COMPENSATION, True))
         self._opening_reduce_to = cfg.get(CONF_OPENING_REDUCE_TO, DEFAULT_OPENING_REDUCE_TO)
+        self._regulation = cfg.get(CONF_REGULATION, DEFAULT_REGULATION)
 
     @property
     def hvac_mode(self):
@@ -319,6 +325,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             return HVACAction.DRYING
         if self._active_mode == HVACMode.FAN_ONLY:
             return HVACAction.FAN
+        if self._active_mode in (HVACMode.HEAT, HVACMode.COOL) and self._unit_regulates():
+            # The unit holds the target itself: show whether it is working right now.
+            if not self.unit.working(self._active_mode.value):
+                return HVACAction.IDLE
         if self._active_mode == HVACMode.HEAT:
             return HVACAction.HEATING
         if self._active_mode == HVACMode.COOL:
@@ -866,9 +876,36 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         elif pump_state.state == HVACMode.OFF:
             await self._restore_thermostats()
 
+    def _unit_regulates(self) -> bool:
+        """The unit holds the room target itself, on the room temperature sent as Follow Me.
+
+        Only while Follow Me is on and a room temperature exists – otherwise the
+        unit would regulate on its own (warmer) sensor, and the thermostat with
+        hysteresis and neutral idle takes over.
+        """
+        if self._regulation != REGULATION_UNIT or self.current_temperature is None:
+            return False
+        switch = self.unit.entity("follow_me")
+        state = self.hass.states.get(switch) if switch else None
+        return state is not None and state.state == STATE_ON
+
     def _desired_mode(self, temperature: float) -> HVACMode:
         if self._hvac_mode == HVACMode.OFF or self._opening_stage != OPENING_STAGE_NONE:
             return HVACMode.OFF
+        if self._unit_regulates():
+            # No on/off hysteresis: the unit runs in the chosen mode with the room
+            # target and modulates itself. In heat_cool it changes between heat
+            # and cool only when the room is clearly past the other target.
+            if self._hvac_mode in (HVACMode.HEAT, HVACMode.COOL):
+                return self._hvac_mode
+            heat_target, cool_target = self._eff_heat(), self._eff_cool()
+            if temperature >= cool_target + self._start_hysteresis:
+                return HVACMode.COOL
+            if temperature <= heat_target - self._start_hysteresis:
+                return HVACMode.HEAT
+            if self._active_mode in (HVACMode.HEAT, HVACMode.COOL):
+                return self._active_mode
+            return HVACMode.HEAT if temperature < (heat_target + cool_target) / 2 else HVACMode.COOL
         # Start early (small margin), stop late (normal hysteresis).
         heat_target, cool_target = self._eff_heat(), self._eff_cool()
         heat_on = temperature <= heat_target - self._start_hysteresis
@@ -991,6 +1028,13 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                     await self._apply_mode(desired, "mode_repair")
                     return
                 await self._disable_thermostats()
+                if desired in (HVACMode.HEAT, HVACMode.COOL) and self._unit_regulates():
+                    # Keep the unit's target on the room target (user, price and away
+                    # changes). A no-op when it already matches.
+                    if now > self._command_guard_until or reason in _TARGET_REASONS:
+                        await self._prepare_setpoint(desired, reason=f"target_{desired.value}")
+                    self.async_write_ha_state()
+                    return
                 if (
                     self._compensate
                     and desired in (HVACMode.HEAT, HVACMode.COOL)
@@ -1018,7 +1062,9 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         if self._active_mode != HVACMode.OFF and not safety_off and elapsed < self._min_run:
             return
         if desired != HVACMode.OFF:
-            user_start = self._user_start
+            # When the unit regulates itself it decides when its compressor runs;
+            # the start guards only protect the thermostat's own on/off cycling.
+            user_start = self._user_start or self._unit_regulates()
             if now - self._sensor_stable_since < self._stable_seconds and not user_start:
                 return
             if self._active_mode == HVACMode.OFF and elapsed < self._min_off and not user_start:
@@ -1164,7 +1210,11 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         else:
             neutral_mode = HVACMode.COOL if self._hvac_mode == HVACMode.COOL else HVACMode.HEAT
 
-        if reason == "opening_reduce" and self._opening_reduce_to == OPENING_REDUCE_SETPOINT:
+        if (
+            reason == "opening_reduce"
+            and self._opening_reduce_to == OPENING_REDUCE_SETPOINT
+            and not self._unit_regulates()
+        ):
             neutral_target = self._setpoint_target(neutral_mode, pump)
         else:
             neutral_target = self._neutral_target(neutral_mode, pump)
@@ -1201,7 +1251,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._neutral_mode = None
         self._last_retarget = time()
         desired = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
-        if self._compensate:
+        if self._compensate and not self._unit_regulates():
             internal = pump.attributes.get("current_temperature")
             external = self.current_temperature
             try:

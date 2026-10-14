@@ -107,6 +107,14 @@ DEFAULT_OPENING_RESUME_DELAY_MINUTES = 10
 OPENING_REDUCE_SETPOINT = "setpoint"
 OPENING_REDUCE_MINIMUM = "minimum"
 DEFAULT_OPENING_REDUCE_TO = OPENING_REDUCE_SETPOINT
+# Who regulates the room: the unit itself on the room temperature it gets as Follow Me
+# (target = room target, no hysteresis/neutral idle), or the thermostat with hysteresis
+# and a neutral idle at the lowest target. "unit" falls back to "thermostat" while
+# Follow Me is off or no room temperature is available.
+CONF_REGULATION = "regulation"
+REGULATION_UNIT = "unit"
+REGULATION_THERMOSTAT = "thermostat"
+DEFAULT_REGULATION = REGULATION_UNIT
 
 PRESET_AUTO = "auto"
 PRESET_MANUAL = "manual"

@@ -31,6 +31,10 @@ from .const import (
     CONF_OPENING_MIN_DELAY_MINUTES,
     CONF_OPENING_OFF_DELAY_MINUTES,
     CONF_OPENING_REDUCE_TO,
+    CONF_REGULATION,
+    DEFAULT_REGULATION,
+    REGULATION_THERMOSTAT,
+    REGULATION_UNIT,
     CONF_OPENING_RESUME_DELAY_MINUTES,
     CONF_OPENING_SENSORS,
     CONF_OUTDOOR_SENSOR,
@@ -161,6 +165,9 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
         }
     if name == "control":
         return {
+            vol.Required(CONF_REGULATION, default=d.get(CONF_REGULATION, DEFAULT_REGULATION)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=[REGULATION_UNIT, REGULATION_THERMOSTAT], translation_key="regulation")
+            ),
             vol.Required(CONF_HEAT_TARGET, default=d.get(CONF_HEAT_TARGET, DEFAULT_HEAT_TARGET)): _number(16, 30, 1, "°C"),
             vol.Required(CONF_COOL_TARGET, default=d.get(CONF_COOL_TARGET, DEFAULT_COOL_TARGET)): _number(18, 32, 1, "°C"),
             vol.Required(CONF_START_HYSTERESIS, default=d.get(CONF_START_HYSTERESIS, DEFAULT_START_HYSTERESIS)): _number(0.0, 2.0, 0.1, "°C"),

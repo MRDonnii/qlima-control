@@ -1,0 +1,42 @@
+# Qlima Control – valgfri pakke: anlæggets servicedata (Midea "group data").
+#
+# Nogle Midea-anlæg svarer på de forespørgsler, Mideas serviceværktøjer bruger:
+# kompressorens frekvens, spoletemperaturer, afgangstemperatur, blæsere, udedelens
+# effekt og afrimning. Qlima S 5225/5232 gør IKKE (testet 2026-10-14 med tre
+# rammeformater) – brug kun pakken til andre Midea-anlæg.
+#
+# Tilføj den efter hovedpakken i din enheds-yaml:
+#
+#   packages:
+#     qlima:
+#       url: https://github.com/MRDonnii/qlima-control
+#       ref: main
+#       files: [esphome/qlima-control.yaml, esphome/qlima-control-servicedata.yaml]
+#       refresh: 1h
+#
+# Grupper anlægget ikke svarer på, springes over efter 3 forsøg. "Servicedata" viser
+# hvilke grupper der svarer. Qlima Control-integrationen bruger kompressorens frekvens
+# til vækning og "Varmer", og anlæggets afrimningsflag til afrimningstælleren.
+
+climate:
+  - id: !extend ac
+    compressor_frequency:
+      name: Kompressor
+    compressor_target_frequency:
+      name: Kompressor mål
+    indoor_coil_temperature:
+      name: Spole inde
+    outdoor_coil_temperature:
+      name: Spole ude
+    discharge_temperature:
+      name: Afgangstemperatur
+    indoor_fan_speed:
+      name: Blæser inde
+    outdoor_fan_speed:
+      name: Blæser ude
+    outdoor_unit_power:
+      name: Udedel effekt
+    defrost:
+      name: Afrimning
+    telemetry_groups:
+      name: Servicedata

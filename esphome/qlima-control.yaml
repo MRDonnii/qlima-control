@@ -16,6 +16,16 @@
 #
 # Rumtemperaturen sendes af Qlima Control-integrationen i Home Assistant
 # (action set_room_temperature) og videresendes til anlægget som Follow Me.
+#
+# Midea-komponenten er Qlima Controls udvidede udgave (components/midea): den taber
+# ikke kommandoer der kommer tæt efter hinanden, sender ECO også i varme, læser
+# anlæggets fejlkode og filteralarm og spørger ikke efter effekt, som Qlima aldrig
+# svarer på. Andre Midea-anlæg kan også give servicedata – se qlima-control-servicedata.yaml.
+
+external_components:
+  - source: github://MRDonnii/qlima-control@main
+    components: [midea]
+    refresh: 1h
 
 api:
   actions:
@@ -93,7 +103,7 @@ climate:
     period: 1s
     timeout: 2s
     num_attempts: 3
-    autoconf: true
+    autoconf: false   # Qlima S 52xx svarer ikke på 0xB5 – modes/presets står nedenfor
     beeper: false
     supported_modes: [HEAT_COOL, COOL, HEAT, DRY, FAN_ONLY]
     custom_fan_modes: [SILENT, TURBO]
@@ -112,6 +122,10 @@ climate:
         - delta: 0.5
     humidity_setpoint:
       name: Fugtighed setpunkt
+    error_code:
+      name: Fejlkode
+    filter_alert:
+      name: Filteralarm
     # Anlægget glemmer Follow Me ved ny tilstand/temperatur – send igen kort efter
     on_state:
       - lambda: |-

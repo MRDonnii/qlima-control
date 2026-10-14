@@ -23,12 +23,15 @@ En ESP32-C3 til ca. 30 kr. erstatter WiFi-sticken i anlæggets USB-port, og inte
 - **Follow Me** via en IR-diode: anlægget regulerer efter *din* rumføler i stedet for sin egen føler oppe under loftet.
 - Auto-vip, lamel ét trin og display til/fra via IR – præcis som fjernbetjeningen.
 - Udetemperatur fra udedelen, anlæggets egen føler, filtertimer og "anlæg svarer".
+- Anlæggets **fejlkode** og **filteralarm**.
+- Kommandoer der kommer tæt efter hinanden, går ikke tabt, og Eco kan også sendes i varme.
+- Valgfri pakke til andre Midea-anlæg: anlæggets **servicedata** (kompressorens frekvens, spoler, afrimning, blæsere, udedelens effekt). Qlima S 5225/5232 svarer ikke på den.
 - **Lokalt web-UI** på `http://<ip>` til styring og status – virker også uden Home Assistant.
 - WiFi-opsætning uden kode: ESP'en laver sit eget netværk første gang.
 - **Opdaterer sig selv**: nye firmware-udgivelser her i repoet dukker op som en opdatering i Home Assistant.
 
 **I Home Assistant (integrationen)**
-- **Rumtermostat** med start/stop-hysterese, min. kørsel/pause og en neutral tomgang i stedet for at slukke og tænde kompressoren.
+- **Anlægget holder selv målet**: det får rumtemperaturen som Follow Me og målet fra integrationen – ingen tænd/sluk og ingen tomgang på 17 °C. Uden Follow Me (eller hvis du vælger det) styrer en **rumtermostat** med hysterese, min. kørsel/pause og neutral tomgang.
 - **Flere rumfølere** – gennemsnit, vægtet i %, koldeste eller varmeste. Sendes automatisk til anlægget som Follow Me.
 - **Døre og vinduer**: skru ned efter 5 min, sluk efter 20 min, genoptag efter 10 min lukket – med nedtællinger.
 - **Shelly / effektmåler**: "Varmer"/"Køler", varmeeffekt, COP og alarm hvis anlægget kører uden effekt.
@@ -161,12 +164,14 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 | Dør/vindue: skru ned efter, sluk efter, genoptag efter | tal (minutter) – ændres med det samme |
 | Pris: op når billigt, Pris: ned når dyrt | tal (hele grader, 0–2) – ændres med det samme |
 | Prisniveau, Vækning | hvad prisstyringen og vækningen gør lige nu |
-| Program | anlæggets Eco/Boost/Nat/Frostvagt |
+| Program | anlæggets Eco/Boost/Nat/Frostvagt – kun dem anlægget tager i den aktuelle tilstand (Normal, når det er slukket) |
 
 ### Sådan regulerer den
 
-- Varmepumpen starter, når rummet er **under målet** (start-hysterese, standard 0,1 °C), og holder i tomgang når rummet er **målet + 0,5 °C** – anlæggets setpunkt sænkes til minimum i stedet for at slukke, så kompressoren skånes.
-- Uden denne styring kører Midea-anlæg typisk videre til ca. 2 °C over målet.
+*Indstillinger → Styring → Regulering*:
+
+- **Anlægget holder målet (Follow Me)** – standard. Anlægget får rumtemperaturen som Follow Me og selve rummålet (inkl. fravær og prisstyring) og modulerer selv kompressoren. Integrationen skruer kun ned ved åben dør/vindue (altid til minimum) og slukker, hvis den står åben længe. Termostaten viser *inaktiv*, når anlægget holder målet uden at køre. Er Follow Me slået fra, eller mangler rumtemperaturen, bruges termostaten nedenfor.
+- **Termostaten** – varmepumpen starter, når rummet er **under målet** (start-hysterese, standard 0,1 °C), og holder i tomgang når rummet er **målet + 0,5 °C** – anlæggets setpunkt sænkes til minimum i stedet for at slukke, så kompressoren skånes. Uden Follow Me kører Midea-anlæg ellers typisk videre til ca. 2 °C over målet, fordi de måler oppe under loftet.
 - Ændrer nogen noget på fjernbetjeningen, respekteres det som **manuel overstyring** (standard 120 min). **Frigiv** afslutter den med det samme.
 - Slukker man anlægget på fjernbetjeningen, slukker termostaten også.
 
@@ -174,7 +179,7 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 
 - Anlæggene tager kun **hele grader** (også Follow Me).
 - Swing/vip styres via IR, så Home Assistant kan ikke se om anlægget vipper.
-- Anlæggene svarer kun med Mideas korte status – ingen kompressorfrekvens eller effekt fra anlægget selv. Brug en effektmåler.
+- Qlima S 5225/5232 svarer kun med Mideas korte status – ingen kompressorfrekvens, spoletemperaturer eller effekt fra anlægget selv (testet med tre rammeformater). Brug en effektmåler. Andre Midea-anlæg kan give servicedata via `qlima-control-servicedata.yaml`.
 
 ---
 
@@ -188,7 +193,7 @@ Slå *Prisstyring* til (kontakt eller *Indstillinger → Pris og vækning*). Den
 
 ### Vækning
 
-Midea-anlæg (og dermed Qlima) kører efter deres egen sparepolitik: efter et par timers hårdt arbejde går de ned på laveste kompressortrin og bliver der, selv om rummet ikke når målet – og turbo bliver ignoreret i den tilstand. En strømafbrydelse nulstiller det. Er *Vækning ved slumring* slået til, og rummet er mindst 0,7 °C under målet, mens anlægget bruger under 300 W i 45 minutter, slår integrationen strømmen fra i 30 sekunder og til igen. Den gør det kun, når termostaten vil have anlægget til at køre, aldrig under afrimning, højst 3 gange i døgnet og med 2 timer imellem. Efter strømafbrydelsen sættes anlæggets tilstand automatisk på plads igen – den tolkes ikke som et tryk på fjernbetjeningen. Grænserne kan ændres under *Pris og vækning*. Iagttagelserne bag stammer fra [citi94/midea-homekit-dongle](https://github.com/citi94/midea-homekit-dongle) (FINDINGS.md).
+Midea-anlæg (og dermed Qlima) kører efter deres egen sparepolitik: efter et par timers hårdt arbejde går de ned på laveste kompressortrin og bliver der, selv om rummet ikke når målet – og turbo bliver ignoreret i den tilstand. En strømafbrydelse nulstiller det. Er *Vækning ved slumring* slået til, og rummet er mindst 0,7 °C under målet, mens anlægget bruger under 300 W (eller kompressoren står på højst 25 Hz, når anlægget sender servicedata) i 45 minutter, slår integrationen strømmen fra i 30 sekunder og til igen. Den gør det kun, når termostaten vil have anlægget til at køre, aldrig under afrimning, højst 3 gange i døgnet og med 2 timer imellem. Efter strømafbrydelsen sættes anlæggets tilstand automatisk på plads igen – den tolkes ikke som et tryk på fjernbetjeningen. Grænserne kan ændres under *Pris og vækning*. Iagttagelserne bag stammer fra [citi94/midea-homekit-dongle](https://github.com/citi94/midea-homekit-dongle) (FINDINGS.md).
 
 ### Servicemenuen på fjernbetjeningen
 
@@ -213,7 +218,7 @@ Hold **On/Off + Fan** inde i 8 sekunder: displayet viser koder med anlæggets eg
 
 ## English
 
-Qlima Control gives you **local control of Qlima/Midea split heat pumps** (Qlima S/SC 5225 and 5232 tested) from Home Assistant. An ESP32-C3 replaces the unit's WiFi stick in its USB port (Midea UART at 9600 baud, 5 V open-drain with a 4.7 kΩ pull-up), and an IR LED next to the unit's receiver handles Follow Me, swing and display. Flash it from the [web installer](https://mrdonnii.github.io/qlima-control/), add it in ESPHome, then add the **Qlima Control** integration (HACS custom repository) and link room temperature sensors (mean, weighted %, min or max), humidity, a power meter, electricity price, doors and windows and a notify service. You get a room thermostat with hysteresis, door/window staging, Follow Me, COP and heat price, filter reminders, release/status/countdowns and all unit functions as buttons. Price steering moves the target a degree up in cheap and down in expensive periods (Strømligning, Nord Pool, Energi Data Service and other forecasts), an optional wake-up power-cycles the unit when it idles in its low-effort hold while the room is too cold (Midea units only work hard again after a power cycle), and Turbo runs the unit's boost for 30 minutes. The firmware has a local web UI and updates itself from this repository's releases.
+Qlima Control gives you **local control of Qlima/Midea split heat pumps** (Qlima S/SC 5225 and 5232 tested) from Home Assistant. An ESP32-C3 replaces the unit's WiFi stick in its USB port (Midea UART at 9600 baud, 5 V open-drain with a 4.7 kΩ pull-up), and an IR LED next to the unit's receiver handles Follow Me, swing and display. Flash it from the [web installer](https://mrdonnii.github.io/qlima-control/), add it in ESPHome, then add the **Qlima Control** integration (HACS custom repository) and link room temperature sensors (mean, weighted %, min or max), humidity, a power meter, electricity price, doors and windows and a notify service. The unit holds the room target itself on Follow Me (or a room thermostat with hysteresis takes over), with door/window staging, Follow Me, COP and heat price, filter reminders, release/status/countdowns and all unit functions as buttons. Price steering moves the target a degree up in cheap and down in expensive periods (Strømligning, Nord Pool, Energi Data Service and other forecasts), an optional wake-up power-cycles the unit when it idles in its low-effort hold while the room is too cold (Midea units only work hard again after a power cycle), and Turbo runs the unit's boost for 30 minutes. The firmware reads the unit's fault code and filter alarm, no longer drops commands sent close together (an optional package reads service data from Midea units that answer it), has a local web UI and updates itself from this repository's releases.
 
 ---
 

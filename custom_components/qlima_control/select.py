@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
+
+# Unit modes in which each Midea preset is sent (the firmware drops it otherwise).
+# Presets not listed here are offered in every mode except off.
+_PRESET_MODES: dict[str, tuple[str, ...]] = {
+    "eco": ("cool", "heat_cool", "heat"),
+    "boost": ("cool", "heat"),
+    "sleep": ("cool", "heat_cool", "heat"),
+    "Freeze Protection": ("heat",),
+}
+_NONE = "none"
+_CONFIRM_SECONDS = 10
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -44,9 +58,21 @@ class UnitPresetSelect(SelectEntity):
             and bool(self._attr("preset_modes"))
         )
 
+    def _all_options(self) -> list[str]:
+        return list(self._attr("preset_modes") or [])
+
+    def _mode(self) -> str | None:
+        state = self.hass.states.get(self._pump)
+        return state.state if state is not None else None
+
     @property
     def options(self) -> list[str]:
-        return list(self._attr("preset_modes") or [])
+        """Only the presets the unit takes in its current mode (none while it is off)."""
+        options = self._all_options()
+        mode = self._mode()
+        if mode in (None, "off", "unavailable", "unknown"):
+            return [o for o in options if o == _NONE] or options[:1]
+        return [o for o in options if o == _NONE or mode in _PRESET_MODES.get(o, (mode,))]
 
     @property
     def current_option(self) -> str | None:
@@ -61,10 +87,26 @@ class UnitPresetSelect(SelectEntity):
         self.async_on_remove(async_track_state_change_event(self.hass, [self._pump], _changed))
 
     async def async_select_option(self, option: str) -> None:
+        if option not in self.options:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="preset_not_in_mode",
+                translation_placeholders={"preset": option, "mode": str(self._mode())},
+            )
         await self.hass.services.async_call(
             "climate",
             "set_preset_mode",
             {"entity_id": self._pump, "preset_mode": option},
             blocking=True,
             context=self._context,
+        )
+        # The unit answers with its real state: tell the user when it did not take the preset.
+        for _ in range(_CONFIRM_SECONDS * 2):
+            if self._attr("preset_mode") == option:
+                return
+            await asyncio.sleep(0.5)
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="preset_not_accepted",
+            translation_placeholders={"preset": option},
         )

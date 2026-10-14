@@ -179,11 +179,14 @@
           "opening_resume_delay_minutes": "Resume after closed for",
           "opening_reduce_to": "Turn down to"
         },
-        "data_description": {}
+        "data_description": {
+          "opening_reduce_to": "When the unit regulates itself (Follow Me), an open door/window always turns it down to the minimum."
+        }
       },
       "control": {
         "title": "Control",
         "data": {
+          "regulation": "Regulation",
           "heat_target": "Heat target",
           "cool_target": "Cool target",
           "start_hysteresis": "Start below target by",
@@ -196,6 +199,7 @@
           "away_setback": "Away setback"
         },
         "data_description": {
+          "regulation": "The unit: it gets the room temperature as Follow Me and holds the target itself (no on/off cycling, no idling at 17 °C). The thermostat: on/off with hysteresis and a neutral idle at the lowest target. The unit falls back to the thermostat while Follow Me is off.",
           "setpoint_compensation": "Not needed with Follow Me.",
           "presence_entity": "Away lowers the heat target (and raises the cool target)."
         }
@@ -559,6 +563,12 @@
         "quarter": "Quarter of an hour",
         "hour": "Hour"
       }
+    },
+    "regulation": {
+      "options": {
+        "unit": "The unit holds the target (Follow Me)",
+        "thermostat": "The thermostat (hysteresis, idle at the minimum)"
+      }
     }
   },
   "issues": {
@@ -581,6 +591,12 @@
     },
     "turbo_no_boost": {
       "message": "The unit has no boost preset."
+    },
+    "preset_not_in_mode": {
+      "message": "The unit does not take “{preset}” in mode {mode}."
+    },
+    "preset_not_accepted": {
+      "message": "The unit did not take “{preset}”."
     }
   }
 }

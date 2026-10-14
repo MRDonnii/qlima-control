@@ -51,6 +51,17 @@ ESP_ROLES: dict[str, tuple[str, tuple[str, ...]]] = {
     "online": ("binary_sensor", ("Anlæg svarer",)),
     "supply_temp": ("sensor", ("Udblæsningstemperatur",)),
     "return_temp": ("sensor", ("Indsugningstemperatur",)),
+    # The unit's own service data (firmware 1.2+, only when the unit answers)
+    "compressor": ("sensor", ("Kompressor",)),
+    "compressor_target": ("sensor", ("Kompressor mål",)),
+    "coil_in": ("sensor", ("Spole inde",)),
+    "coil_out": ("sensor", ("Spole ude",)),
+    "discharge": ("sensor", ("Afgangstemperatur",)),
+    "outdoor_power": ("sensor", ("Udedel effekt",)),
+    "defrost": ("binary_sensor", ("Afrimning",)),
+    "error_code": ("sensor", ("Fejlkode",)),
+    "filter_alert": ("binary_sensor", ("Filteralarm",)),
+    "service_data": ("text_sensor", ("Servicedata",)),
 }
 
 _INVALID = (STATE_UNAVAILABLE, STATE_UNKNOWN, "", None)
@@ -227,6 +238,27 @@ class QlimaUnit:
         if state is None or state.state in _INVALID:
             return None if entity_id else (self.pump_mode() is not None)
         return state.state == "on"
+
+    def compressor_hz(self) -> float | None:
+        """Compressor frequency from the unit's service data, when it reports it."""
+        return self._float(self.entity("compressor"))
+
+    def unit_defrost(self) -> bool | None:
+        """The unit's own defrost flag, when it reports it."""
+        entity_id = self.entity("defrost")
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is None or state.state in _INVALID:
+            return None
+        return state.state == "on"
+
+    def working(self, mode: str) -> bool:
+        """The unit heats/cools right now: compressor running, else power above the running level."""
+        if self.pump_mode() != mode:
+            return False
+        hz = self.compressor_hz()
+        if hz is not None:
+            return hz > 0
+        return self.running(mode)
 
     def running(self, mode: str) -> bool:
         """The unit is in `mode` and actually draws power."""

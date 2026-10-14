@@ -179,11 +179,14 @@
           "opening_resume_delay_minutes": "Genoptag efter lukket i",
           "opening_reduce_to": "Skru ned til"
         },
-        "data_description": {}
+        "data_description": {
+          "opening_reduce_to": "Når anlægget selv regulerer (Follow Me), skrues der altid ned til minimum ved åben dør/vindue."
+        }
       },
       "control": {
         "title": "Styring",
         "data": {
+          "regulation": "Regulering",
           "heat_target": "Mål ved varme",
           "cool_target": "Mål ved køl",
           "start_hysteresis": "Start under målet med",
@@ -196,6 +199,7 @@
           "away_setback": "Sænkning når væk"
         },
         "data_description": {
+          "regulation": "Anlægget: det får rumtemperaturen som Follow Me og holder selv målet (ingen tænd/sluk, ingen pause på 17 °C). Termostaten: tænd/sluk med hysterese og pause på laveste mål. Anlægget bruger termostaten, mens Follow Me er slået fra.",
           "setpoint_compensation": "Ikke nødvendig med Follow Me.",
           "presence_entity": "Når I er væk, sænkes målet ved varme (og hæves ved køl)."
         }
@@ -559,6 +563,12 @@
         "quarter": "Kvarter",
         "hour": "Time"
       }
+    },
+    "regulation": {
+      "options": {
+        "unit": "Anlægget holder målet (Follow Me)",
+        "thermostat": "Termostaten (hysterese, pause på minimum)"
+      }
     }
   },
   "issues": {
@@ -581,6 +591,12 @@
     },
     "turbo_no_boost": {
       "message": "Anlægget har ikke et boost-program."
+    },
+    "preset_not_in_mode": {
+      "message": "Anlægget tager ikke imod “{preset}” i tilstanden {mode}."
+    },
+    "preset_not_accepted": {
+      "message": "Anlægget tog ikke imod “{preset}”."
     }
   }
 }

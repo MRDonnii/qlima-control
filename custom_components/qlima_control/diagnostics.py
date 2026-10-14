@@ -39,6 +39,13 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
             "cop": unit.cop(),
             "measured_heat": unit.measured_heat(),
             "measured_cop": unit.measured_cop(),
+            "compressor_hz": unit.compressor_hz(),
+            "unit_defrost": unit.unit_defrost(),
+            "working_heat": unit.working("heat"),
+        },
+        "regulation": None if thermostat is None else {
+            "setting": thermostat._regulation,
+            "unit_regulates": thermostat._unit_regulates(),
         },
         "thermostat": None if thermostat is None else {"hvac_mode": thermostat.hvac_mode, **thermostat.extra_state_attributes},
         "stats": stats.data if stats else None,

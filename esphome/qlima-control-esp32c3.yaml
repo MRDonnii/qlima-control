@@ -17,7 +17,7 @@ esphome:
   name_add_mac_suffix: true
   project:
     name: mrdonnii.qlima-control
-    version: "1.1.0"
+    version: "1.2.0"
 
 esp32:
   variant: esp32c3

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 (firmware 1.2.0)
+- **The unit holds the target itself** (new setting *Regulation*, default): with Follow Me on, the unit gets the room target and regulates on the room temperature – no more on/off hysteresis and no idling at 17 °C when the room is warm. Only an open door/window turns it down (always to the minimum), and only a long-open one switches it off. While Follow Me is off or no room temperature exists, the thermostat with hysteresis and neutral idle takes over as before. *Regulation → The thermostat* keeps the old behaviour.
+- Target, price and away changes reach the unit at once; the thermostat shows *idle* while the unit holds the target without running.
+- **Unit preset select** only offers the presets the unit takes in its current mode (only "Normal" while it is off) and says so when the unit did not take the chosen one, instead of silently doing nothing.
+- Firmware: commands sent close together are no longer dropped (MideaUART PR #48), **ECO** is sent in heat and auto too (upstream only allowed it in cool, so choosing Eco in heat did nothing), and the unit's **fault code** and **filter alarm** from its status frame.
+- Firmware: no more power-usage query every 30 s and no capabilities query at boot – Qlima never answers them, and each held the bus for three 2-second retries, delaying commands.
+- Firmware uses MRDonnii/MideaUART (branch `qlima-control`) through the extended `midea` component in `components/`.
+- Optional package `esphome/qlima-control-servicedata.yaml` for other Midea units: the unit's **service data** (compressor frequency, coils, discharge temperature, fans, outdoor unit power, defrost). Qlima S 5225/5232 do not answer it (tested with three frame layouts). When a unit reports them, defrosts are counted from its own defrost flag, and wake-up and *idle* look at the compressor frequency.
+
 ## 1.4.1
 - Turbo on a unit that does not heat or cool now gives a clear message instead of a server error.
 - The Wake-up sensor follows its switch at once instead of after the next minute.

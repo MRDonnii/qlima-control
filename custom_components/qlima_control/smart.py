@@ -54,6 +54,8 @@ from .unit import QlimaUnit
 _LOGGER = logging.getLogger(__name__)
 PRICE_MIN_HOLD = timedelta(minutes=30)
 LEVEL_OFF = "off"
+# Midea units hold at their lowest compressor grade (~20 Hz) in the low-effort state.
+_WAKE_HOLD_MAX_HZ = 25
 
 
 def _cfg(entry: ConfigEntry) -> dict[str, Any]:
@@ -215,13 +217,18 @@ class WakeControl:
             return "defrosting"
         room = self.unit.room_temperature().value
         watts = self.unit.power()
-        if room is None or watts is None:
+        hz = self.unit.compressor_hz()
+        if room is None or (watts is None and hz is None):
             return "no_data"
         target = thermostat.effective_target(mode)
         deficit = (target - room) if mode == "heat" else (room - target)
         if deficit < float(cfg.get(CONF_WAKE_DEFICIT, DEFAULT_WAKE_DEFICIT)):
             return "on_target"
-        if watts >= float(cfg.get(CONF_WAKE_POWER_W, DEFAULT_WAKE_POWER_W)):
+        if hz is not None:
+            # The compressor frequency tells the low-effort hold directly (~20 Hz or stopped).
+            if hz > _WAKE_HOLD_MAX_HZ:
+                return "working"
+        elif watts >= float(cfg.get(CONF_WAKE_POWER_W, DEFAULT_WAKE_POWER_W)):
             return "working"
         return "stalled"
 

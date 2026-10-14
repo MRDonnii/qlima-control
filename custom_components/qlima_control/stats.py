@@ -113,6 +113,13 @@ class QlimaStats:
         self._save()
 
     def _detect_defrost(self, mode: str | None) -> None:
+        own = self.unit.unit_defrost()
+        if own is not None:
+            # The unit reports its defrost itself (service data): count each start.
+            if own and not self.defrosting:
+                self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
+            self.defrosting = own
+            return
         power, outdoor = self.unit.power(), self.unit.outdoor()
         if mode != "heat" or power is None or outdoor is None or outdoor > _DEFROST_MAX_OUTDOOR:
             self.defrosting = False
