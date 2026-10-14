@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.2
+- **Follow Me is steered instead of the unit's target** (replaces the 1.7.1 nudge): the unit's own target stays put, and the value sent as Follow Me is the target −1 from 0.2 °C below target until the target is reached (full effort, no turning down before), the target itself from there (the unit modulates), and the target +1 from +0.3 °C (off before +0.5 °C) until the room is 0.2 °C below again. Cooling mirrors it. Shown as `follow_me_step` / `follow_me_sent` on the thermostat; the value goes out at once when the step, the target or the mode changes.
+
 ## 1.7.1
 - **The unit no longer idles half a degree below target.** Follow Me reaches the unit in whole degrees (the IR format has no decimals), and the unit only starts a degree past its target – so at 21.6 °C with 22 °C wanted it read "22" and stood still. While the unit regulates, its target is now nudged a degree (heat up, cool down) when the room is 0.3 K off and the unit does not run, and set back once the room is within 0.1 K. The thermostat shows the nudge as `unit_nudge`.
 

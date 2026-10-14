@@ -157,22 +157,42 @@ async def test_defrost_comes_from_the_unit_when_it_reports_it(hass, esp_device):
     assert not stats.defrosting
 
 
-async def test_unit_is_nudged_when_the_room_drifts_below_target(hass, clock):
-    """Follow Me is whole degrees: at 21.6 the unit reads 22 and idles – push its target a degree."""
+
+async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
+    """Follow Me is whole degrees: target −1 until the room reaches the target, then the
+    target (modulate), target +1 from +0.3 K (off before +0.5) until 0.2 K below again."""
     pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
     await _follow_me(hass, entity, clock)
-    running = {"on": False}
-    entity.unit.running = lambda mode: running["on"]
     assert pump.target == 22
-    await _room(hass, entity, clock, 21.8, minutes=6)
-    assert pump.target == 22  # only 0.2 K short: the unit gets to start on its own
-    await _room(hass, entity, clock, 21.6, minutes=6)
-    assert pump.target == 23 and entity.extra_state_attributes["unit_nudge"] == "heat"
-    running["on"] = True
-    await _room(hass, entity, clock, 21.85, minutes=6)
-    assert pump.target == 23  # still short of the target
-    await _room(hass, entity, clock, 21.95, minutes=6)
-    assert pump.target == 22 and entity.extra_state_attributes["unit_nudge"] is None
-    # Running already when the room falls: no nudge needed.
-    await _room(hass, entity, clock, 21.5, minutes=6)
-    assert pump.target == 22
+    steps = [
+        (22.0, 22, "hold"),
+        (21.85, 22, "hold"),   # only 0.15 K short: no start yet
+        (21.8, 21, "start"),   # 0.2 K short: start
+        (21.95, 21, "start"),  # full effort until the target is reached
+        (22.0, 22, "hold"),    # reached: let it modulate
+        (21.9, 22, "hold"),    # dips a little: keeps modulating, no new full push
+        (22.25, 22, "hold"),
+        (22.3, 23, "stop"),    # +0.3 K: off before +0.5
+        (22.0, 23, "stop"),    # stays off while it cools down …
+        (21.85, 23, "stop"),
+        (21.8, 21, "start"),   # … until 0.2 K below again
+    ]
+    for room, sent, step in steps:
+        assert entity.follow_me_value(room) == sent, room
+        assert entity.extra_state_attributes["follow_me_step"] == step, room
+    assert pump.target == 22  # the unit's own target never moves
+    # Cooling mirrors it.
+    await entity.async_set_hvac_mode("cool")
+    await _room(hass, entity, clock, 25.0, minutes=25)
+    assert pump.state == "cool" and pump.target == 25
+    assert entity.follow_me_value(25.2) == 26  # 0.2 K warm: start cooling
+    assert entity.follow_me_value(25.05) == 26  # until the target is reached
+    assert entity.follow_me_value(25.0) == 25
+    assert entity.follow_me_value(24.7) == 24  # 0.3 K cold: stop
+
+
+async def test_follow_me_is_the_room_when_the_thermostat_regulates(hass, clock):
+    pump, entity = await _setup_pump(hass, clock, room_temp=21.0)
+    await _follow_me(hass, entity, clock, on=False)
+    assert entity.follow_me_value(21.6) == 21.6
+    assert entity.extra_state_attributes["follow_me_step"] == "room"

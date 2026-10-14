@@ -8,10 +8,11 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import slugify
 
-from .const import CONF_DEVICE
+from .const import CONF_DEVICE, DOMAIN, SIGNAL_UPDATE
 from .unit import QlimaUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,11 @@ def esphome_action(hass: HomeAssistant, device_id: str | None) -> str | None:
 
 
 class RoomFeeder:
-    """Pushes the combined room temperature on change and every minute."""
+    """Pushes the room temperature on change and every minute.
+
+    While the unit regulates on it, the thermostat steers the value (see
+    follow_me_value): it then also goes out when the target or mode changes.
+    """
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, unit: QlimaUnit) -> None:
         self.hass = hass
@@ -55,20 +60,30 @@ class RoomFeeder:
             async_track_state_change_event(self.hass, self.unit.temperature_sensors, self._changed)
         )
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, _RESEND))
+        self._unsubs.append(
+            async_dispatcher_connect(self.hass, SIGNAL_UPDATE.format(self.entry.entry_id), self._changed)
+        )
 
     def stop(self) -> None:
         while self._unsubs:
             self._unsubs.pop()()
 
+    def _value(self) -> float | None:
+        room = self.unit.room_temperature().value
+        if room is None:
+            return None
+        thermostat = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id)
+        return thermostat.follow_me_value(room) if thermostat is not None else room
+
     @callback
-    def _changed(self, _event: Event) -> None:
-        value = self.unit.room_temperature().value
+    def _changed(self, _event: Event | None = None) -> None:
+        value = self._value()
         if value is not None and value != self._last:
             self._send(value)
 
     @callback
     def _tick(self, _now) -> None:
-        value = self.unit.room_temperature().value
+        value = self._value()
         if value is not None:
             self._send(value)
 

@@ -176,6 +176,11 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 *Indstillinger → Styring → Regulering*:
 
 - **Anlægget holder målet (Follow Me)** – standard. Anlægget får rumtemperaturen som Follow Me og selve rummålet (inkl. fravær og prisstyring) og modulerer selv kompressoren. Integrationen skruer kun ned ved åben dør/vindue (altid til minimum) og slukker, hvis den står åben længe. Termostaten viser *inaktiv*, når anlægget holder målet uden at køre. Er Follow Me slået fra, eller mangler rumtemperaturen, bruges termostaten nedenfor.
+  - Follow Me kan kun sende **hele grader**, og anlægget starter først en grad under sit mål og stopper en grad over – med den rigtige rumtemperatur ville rummet svinge ±0,5 °C. Derfor styrer integrationen den værdi, der sendes, mens anlæggets eget mål står fast:
+    - **Start** (målet − 1) når rummet er 0,2 °C under målet – fuld varme, indtil målet er nået.
+    - **Hold** (målet) fra målet og op til +0,3 °C – et kørende anlæg modulerer roligt, et slukket bliver slukket.
+    - **Stop** (målet + 1) ved +0,3 °C, så det slukker før +0,5 °C – indtil rummet igen er 0,2 °C under målet.
+    - Køl er spejlvendt. Termostaten viser det som `follow_me_step` og `follow_me_sent`; *Rumtemperatur (modtaget)* på ESP'en viser den styrede værdi.
 - **Termostaten** – varmepumpen starter, når rummet er **under målet** (start-hysterese, standard 0,1 °C), og holder i tomgang når rummet er **målet + 0,5 °C** – anlæggets setpunkt sænkes til minimum i stedet for at slukke, så kompressoren skånes. Uden Follow Me kører Midea-anlæg ellers typisk videre til ca. 2 °C over målet, fordi de måler oppe under loftet.
 - Ændrer nogen noget på fjernbetjeningen, respekteres det som **manuel overstyring** (standard 120 min). **Frigiv** afslutter den med det samme.
 - Slukker man anlægget på fjernbetjeningen, slukker termostaten også.
