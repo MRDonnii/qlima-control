@@ -574,5 +574,13 @@
       "title": "{name}: the ESP in the unit was not found",
       "description": "The heat pump climate entity of the chosen ESP is missing. Check that the ESP is online and added in ESPHome, or choose it again under Configure → Unit."
     }
+  },
+  "exceptions": {
+    "turbo_not_running": {
+      "message": "Turbo only works while the unit heats or cools."
+    },
+    "turbo_no_boost": {
+      "message": "The unit has no boost preset."
+    }
   }
 }

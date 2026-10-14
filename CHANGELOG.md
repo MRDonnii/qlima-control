@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+- Turbo on a unit that does not heat or cool now gives a clear message instead of a server error.
+- The Wake-up sensor follows its switch at once instead of after the next minute.
+
 ## 1.4.0
 - **Price steering**: the target goes a whole degree up in cheap periods and down in expensive ones (cooling the other way), ranked against the forecast from 6 h back to 24 h ahead and held at least 30 minutes. Reads Strømligning, Nord Pool, Energi Data Service, Tibber-style and generic price forecasts; quarter or hour periods, or follow a select.
 - **Wake-up**: optional power-cycle when the unit idles on low power while the room stays below target (Midea units drop to a low-effort hold that only a power cycle clears). At most 3 a day, 2 hours apart, never during defrost or when the unit should not run.

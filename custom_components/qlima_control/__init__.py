@@ -56,6 +56,9 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if price is not None:
             price.refresh(force=True)
         thermostat.apply_live_settings()
+        wake = hass.data[DOMAIN].get(f"{entry.entry_id}_wake")
+        if wake is not None:
+            wake.refresh()
         return
     await hass.config_entries.async_reload(entry.entry_id)
 

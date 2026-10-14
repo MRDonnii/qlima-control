@@ -22,7 +22,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.util import dt as dt_util
@@ -226,6 +226,12 @@ class WakeControl:
         return "stalled"
 
     @callback
+    def refresh(self) -> None:
+        """Re-check now (e.g. right after the switch changed)."""
+        self.reason = self.check(time())
+        async_dispatcher_send(self.hass, SIGNAL_UPDATE.format(self.entry.entry_id))
+
+    @callback
     def _tick(self, _now) -> None:
         now = time()
         today = dt_util.now().date()
@@ -289,9 +295,9 @@ class TurboControl:
 
     async def async_start(self) -> None:
         if not self.available():
-            raise HomeAssistantError("The unit has no boost preset")
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="turbo_no_boost")
         if self.unit.pump_mode() not in ("heat", "cool"):
-            raise HomeAssistantError("Turbo only works while the unit heats or cools")
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="turbo_not_running")
         await self._preset("boost")
         self.until = time() + TURBO_MINUTES * 60
         if self._cancel:

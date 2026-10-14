@@ -170,6 +170,22 @@ async def test_wake_is_off_by_default_and_never_when_unit_off(hass, esp_device):
     thermostat = hass.data[DOMAIN][entry.entry_id]
     thermostat._hvac_mode = HVACMode.OFF
     assert wake.check(0) == "not_running"
+    switch = _state(hass, "switch", "auto_wake")
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch.entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert _state(hass, "sensor", "wake_status").state == "off"  # at once, not after the next minute
+
+
+async def test_turbo_refuses_when_unit_not_running(hass, esp_device):
+    import pytest
+    from homeassistant.exceptions import ServiceValidationError
+
+    await _setup(hass, esp_device)
+    state = hass.states.get("climate.qlima_test_varmepumpe")
+    hass.states.async_set(state.entity_id, "off", state.attributes)
+    await hass.async_block_till_done()
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call("switch", "turn_on", {"entity_id": _state(hass, "switch", "turbo").entity_id}, blocking=True)
 
 
 async def test_turbo_runs_thirty_minutes(hass, esp_device):

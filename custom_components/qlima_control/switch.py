@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ServiceValidationError
 
 from .const import DOMAIN
 from .entity import EspProxy, QlimaEntity
@@ -149,7 +149,7 @@ class TurboSwitch(QlimaEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs) -> None:
         turbo = self._turbo
         if turbo is None:
-            raise HomeAssistantError("Turbo is not ready")
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="turbo_no_boost")
         await turbo.async_start()
         self.async_write_ha_state()
 

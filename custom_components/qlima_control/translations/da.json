@@ -574,5 +574,13 @@
       "title": "{name}: ESP'en i anlægget blev ikke fundet",
       "description": "Klimaenheden fra den valgte ESP mangler. Tjek at ESP'en er online og tilføjet i ESPHome, eller vælg den igen under Konfigurer → Anlæg."
     }
+  },
+  "exceptions": {
+    "turbo_not_running": {
+      "message": "Turbo virker kun, mens anlægget varmer eller køler."
+    },
+    "turbo_no_boost": {
+      "message": "Anlægget har ikke et boost-program."
+    }
   }
 }
