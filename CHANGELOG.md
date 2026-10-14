@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.1
+- **The unit no longer idles half a degree below target.** Follow Me reaches the unit in whole degrees (the IR format has no decimals), and the unit only starts a degree past its target – so at 21.6 °C with 22 °C wanted it read "22" and stood still. While the unit regulates, its target is now nudged a degree (heat up, cool down) when the room is 0.3 K off and the unit does not run, and set back once the room is within 0.1 K. The thermostat shows the nudge as `unit_nudge`.
+
 ## 1.7.0
 - **ESP32 status** on every Qlima Control device: *Connected*, *Unit not answering*, *New firmware ready* or *Not connected*, with firmware, newest firmware, ESPHome version, IP, MAC, Wi-Fi signal, uptime and whether the unit answers as attributes.
 - The ESP's own diagnostics on the Qlima Control device: *ESP32 connected*, *Wi-Fi signal*, *IP address*, *uptime* and *ESPHome version*.

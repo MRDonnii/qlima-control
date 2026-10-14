@@ -155,3 +155,24 @@ async def test_defrost_comes_from_the_unit_when_it_reports_it(hass, esp_device):
     hass.states.async_set("binary_sensor.qlima_test_afrimning", "off")
     stats._detect_defrost("heat")
     assert not stats.defrosting
+
+
+async def test_unit_is_nudged_when_the_room_drifts_below_target(hass, clock):
+    """Follow Me is whole degrees: at 21.6 the unit reads 22 and idles – push its target a degree."""
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    await _follow_me(hass, entity, clock)
+    running = {"on": False}
+    entity.unit.running = lambda mode: running["on"]
+    assert pump.target == 22
+    await _room(hass, entity, clock, 21.8, minutes=6)
+    assert pump.target == 22  # only 0.2 K short: the unit gets to start on its own
+    await _room(hass, entity, clock, 21.6, minutes=6)
+    assert pump.target == 23 and entity.extra_state_attributes["unit_nudge"] == "heat"
+    running["on"] = True
+    await _room(hass, entity, clock, 21.85, minutes=6)
+    assert pump.target == 23  # still short of the target
+    await _room(hass, entity, clock, 21.95, minutes=6)
+    assert pump.target == 22 and entity.extra_state_attributes["unit_nudge"] is None
+    # Running already when the room falls: no nudge needed.
+    await _room(hass, entity, clock, 21.5, minutes=6)
+    assert pump.target == 22

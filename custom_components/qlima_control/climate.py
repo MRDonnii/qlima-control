@@ -88,6 +88,12 @@ _TARGET_CONFIRM_SECONDS = 10
 _TARGET_CONFIRM_ATTEMPTS = 4
 # While heating/cooling, re-check the compensated unit target this often.
 _RETARGET_SECONDS = 300
+# The unit gets Follow Me in whole degrees and starts only a degree past its target,
+# so on its own it lets the room drift ±0.5 K. While it regulates, its target is
+# nudged a degree when the room is this far off and the unit does not run, and
+# nudged back once the room is this close to the target again.
+_NUDGE_START = 0.3
+_NUDGE_END = 0.1
 # Midea UART (ESPHome) silently drops a command that arrives while the
 # previous one is still waiting for the unit's reply, so pump commands are
 # serialised with a gap between them.
@@ -155,6 +161,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._last_transition = time()
         self._last_command = 0.0
         self._last_retarget = 0.0
+        self._nudge: HVACMode | None = None  # mode whose unit target is nudged a degree
         self._neutral_value: float | None = None
         self._command_guard_until = 0.0
         self._manual_until = 0.0
@@ -376,6 +383,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "temperature_sensors": self._sensors,
             "away": self.is_away(),
             "effective_heat_target": self._eff_heat(),
+            "unit_nudge": self._nudge.value if self._nudge else None,
             "effective_cool_target": self._eff_cool(),
             "price_offset": self._price_offset(self._active_mode == HVACMode.COOL),
             "active_mode": self._active_mode,
@@ -876,6 +884,23 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         elif pump_state.state == HVACMode.OFF:
             await self._restore_thermostats()
 
+    def _nudge_step(self, mode: HVACMode) -> int:
+        """+1 (heat) / −1 (cool) while the unit needs a push to start, else 0."""
+        room = self.current_temperature
+        if room is None or mode not in (HVACMode.HEAT, HVACMode.COOL):
+            self._nudge = None
+            return 0
+        sign = 1 if mode == HVACMode.HEAT else -1
+        target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
+        short = (target - room) * sign  # how far the room is from the target, in the mode's direction
+        if self._nudge != mode:
+            self._nudge = None
+            if short >= _NUDGE_START and not self.unit.running(mode.value):
+                self._nudge = mode
+        elif short <= _NUDGE_END:
+            self._nudge = None
+        return sign if self._nudge == mode else 0
+
     def _unit_regulates(self) -> bool:
         """The unit holds the room target itself, on the room temperature sent as Follow Me.
 
@@ -1251,7 +1276,9 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._neutral_mode = None
         self._last_retarget = time()
         desired = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
-        if self._compensate and not self._unit_regulates():
+        if self._unit_regulates():
+            desired += self._nudge_step(mode)
+        elif self._compensate:
             internal = pump.attributes.get("current_temperature")
             external = self.current_temperature
             try:
