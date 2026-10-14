@@ -123,6 +123,7 @@
           "power": "Power and Shelly",
           "openings": "Doors and windows",
           "control": "Control",
+          "smart": "Price and wake-up",
           "notifications": "Notifications",
           "advanced": "Advanced"
         }
@@ -221,6 +222,25 @@
       "weights": {
         "title": "Weight of each sensor",
         "description": "Give each room sensor a weight in %. The weights are relative – a sensor that is offline is left out and the others share its weight.\n\n{sensors}"
+      },
+      "smart": {
+        "title": "Price and wake-up",
+        "description": "Price steering moves the target a whole degree up in cheap periods and down in expensive ones (cooling: the other way). Wake-up cuts the supply for 30 s when the unit idles on low power while the room stays below target – Midea-type units only work hard again after a power-cycle. At most 3 wake-ups a day, 2 hours apart.",
+        "data": {
+          "price_control": "Price steering",
+          "price_cheap_offset": "Up in cheap periods",
+          "price_expensive_offset": "Down in expensive periods",
+          "price_resolution": "Price periods",
+          "price_resolution_entity": "Follow resolution from entity",
+          "auto_wake": "Wake the unit when it idles",
+          "wake_power_w": "Counts as idling below",
+          "wake_minutes": "Idling for at least",
+          "wake_deficit": "Room below target by at least"
+        },
+        "data_description": {
+          "price_resolution_entity": "Optional: a select whose state says '15 min' or 'time'/'hour' – used when 'Price periods' is Auto.",
+          "wake_power_w": "Electric power below this while the room is cold counts as the unit not trying."
+        }
       }
     },
     "error": {
@@ -385,6 +405,30 @@
       },
       "measured_cop": {
         "name": "COP (measured)"
+      },
+      "price_level": {
+        "name": "Price level",
+        "state": {
+          "off": "Off",
+          "unknown": "No forecast",
+          "cheap": "Cheap",
+          "normal": "Normal",
+          "expensive": "Expensive"
+        }
+      },
+      "wake_status": {
+        "name": "Wake-up",
+        "state": {
+          "off": "Off",
+          "busy": "Restarting",
+          "not_running": "Not heating",
+          "unit_not_on": "Unit not on",
+          "defrosting": "Defrosting",
+          "no_data": "No data",
+          "on_target": "On target",
+          "working": "Working",
+          "stalled": "Idling – will wake"
+        }
       }
     },
     "climate": {
@@ -458,6 +502,15 @@
       },
       "openings_enabled": {
         "name": "React to doors and windows"
+      },
+      "price_control": {
+        "name": "Price steering"
+      },
+      "auto_wake": {
+        "name": "Wake when idling"
+      },
+      "turbo": {
+        "name": "Turbo 30 min"
       }
     },
     "number": {
@@ -469,6 +522,12 @@
       },
       "opening_resume_after": {
         "name": "Door/window: resume after closed"
+      },
+      "price_cheap_offset": {
+        "name": "Price: up when cheap"
+      },
+      "price_expensive_offset": {
+        "name": "Price: down when expensive"
       }
     }
   },
@@ -492,6 +551,13 @@
       "options": {
         "setpoint": "The target (keeps the room)",
         "minimum": "The minimum (17 °C)"
+      }
+    },
+    "price_resolution": {
+      "options": {
+        "auto": "Auto",
+        "quarter": "Quarter of an hour",
+        "hour": "Hour"
       }
     }
   },

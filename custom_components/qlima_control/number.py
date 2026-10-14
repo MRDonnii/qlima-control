@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_PRICE_CHEAP_OFFSET,
+    CONF_PRICE_EXPENSIVE_OFFSET,
+    DEFAULT_PRICE_CHEAP_OFFSET,
+    DEFAULT_PRICE_EXPENSIVE_OFFSET,
     CONF_OPENING_MIN_DELAY_MINUTES,
     CONF_OPENING_OFF_DELAY_MINUTES,
     CONF_OPENING_RESUME_DELAY_MINUTES,
@@ -25,9 +29,46 @@ _NUMBERS = (
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    if not {**entry.data, **entry.options}.get("opening_sensors"):
-        return
-    async_add_entities([OpeningDelay(hass, entry, *spec) for spec in _NUMBERS])
+    entities: list[NumberEntity] = []
+    if {**entry.data, **entry.options}.get("opening_sensors"):
+        entities += [OpeningDelay(hass, entry, *spec) for spec in _NUMBERS]
+    if hass.data["qlima_control"][f"{entry.entry_id}_unit"].price_sensor:
+        entities += [PriceOffset(hass, entry, *spec) for spec in _PRICE_NUMBERS]
+    async_add_entities(entities)
+
+
+_PRICE_NUMBERS = (
+    ("price_cheap_offset", CONF_PRICE_CHEAP_OFFSET, DEFAULT_PRICE_CHEAP_OFFSET, "mdi:thermometer-plus"),
+    ("price_expensive_offset", CONF_PRICE_EXPENSIVE_OFFSET, DEFAULT_PRICE_EXPENSIVE_OFFSET, "mdi:thermometer-minus"),
+)
+
+
+class PriceOffset(QlimaEntity, NumberEntity):
+    """Whole degrees the target moves in cheap / expensive periods (0 = never)."""
+
+    _attr_mode = NumberMode.BOX
+    _attr_native_step = 1
+    _attr_native_min_value = 0
+    _attr_native_max_value = 2
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, hass, entry, key, conf, default, icon) -> None:
+        super().__init__(hass, entry, key)
+        self._conf = conf
+        self._default = default
+        self._attr_icon = icon
+
+    def watched(self) -> list[str]:
+        return []
+
+    @property
+    def native_value(self) -> float:
+        return float({**self.entry.data, **self.entry.options}.get(self._conf, self._default))
+
+    async def async_set_native_value(self, value: float) -> None:
+        self.hass.config_entries.async_update_entry(self.entry, options={**self.entry.options, self._conf: int(value)})
+        self.async_write_ha_state()
 
 
 class OpeningDelay(QlimaEntity, NumberEntity):

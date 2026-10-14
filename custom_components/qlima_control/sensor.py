@@ -23,6 +23,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     for key, fn, kind, needs in _MEASUREMENTS:
         if needs(unit):
             entities.append(Measurement(hass, entry, key, fn, kind))
+    if unit.price_sensor:
+        entities.append(PriceLevelSensor(hass, entry))
+    if unit.power_switch:
+        entities.append(WakeSensor(hass, entry))
     stats = hass.data[DOMAIN][f"{entry.entry_id}_stats"]
     for key, field, kind, needs in _STATS:
         if needs(unit):
@@ -192,3 +196,55 @@ class CountdownSensor(_ThermostatSensor):
     def native_value(self) -> datetime | None:
         thermostat = self._thermostat
         return _as_datetime(thermostat.countdowns()[self._key]) if thermostat is not None else None
+
+
+class PriceLevelSensor(_ThermostatSensor):
+    """Cheap / normal / expensive right now, and what that does to the target."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["off", "unknown", "cheap", "normal", "expensive"]
+    _attr_icon = "mdi:cash-sync"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "price_level")
+
+    @property
+    def _price(self):
+        return self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_price")
+
+    @property
+    def native_value(self) -> str | None:
+        price = self._price
+        return price.level if price is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        price = self._price
+        return price.attributes() if price is not None else None
+
+
+class WakeSensor(_ThermostatSensor):
+    """Whether the unit is idling while the room is too cold, and when it is woken."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["off", "busy", "not_running", "unit_not_on", "defrosting", "no_data", "on_target", "working", "stalled"]
+    _attr_icon = "mdi:alarm-light-outline"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "wake_status")
+
+    @property
+    def _wake(self):
+        return self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_wake")
+
+    @property
+    def native_value(self) -> str | None:
+        wake = self._wake
+        return wake.reason if wake is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        wake = self._wake
+        if wake is None:
+            return None
+        return {**wake.attributes(), "wakes_today": wake.wakes_today}

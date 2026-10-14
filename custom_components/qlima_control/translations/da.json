@@ -123,6 +123,7 @@
           "power": "Strøm og Shelly",
           "openings": "Døre og vinduer",
           "control": "Styring",
+          "smart": "Pris og vækning",
           "notifications": "Notifikationer",
           "advanced": "Avanceret"
         }
@@ -221,6 +222,25 @@
       "weights": {
         "title": "Vægt på hver føler",
         "description": "Giv hver rumføler en vægt i %. Vægtene er relative – er en føler offline, udelades den, og de andre deler dens vægt.\n\n{sensors}"
+      },
+      "smart": {
+        "title": "Pris og vækning",
+        "description": "Prisstyring hæver målet en hel grad i billige perioder og sænker det i dyre (køl: omvendt). Vækning slår strømmen fra i 30 s, når anlægget kører på lavt blus, mens rummet er under målet – Midea-anlæg arbejder først igen efter en strømafbrydelse. Højst 3 vækninger i døgnet med 2 timer imellem.",
+        "data": {
+          "price_control": "Prisstyring",
+          "price_cheap_offset": "Op i billige perioder",
+          "price_expensive_offset": "Ned i dyre perioder",
+          "price_resolution": "Prisperioder",
+          "price_resolution_entity": "Følg opløsning fra entity",
+          "auto_wake": "Væk anlægget, når det slumrer",
+          "wake_power_w": "Slumrer under",
+          "wake_minutes": "Slumrer i mindst",
+          "wake_deficit": "Rummet under målet med mindst"
+        },
+        "data_description": {
+          "price_resolution_entity": "Valgfri: en select hvis tilstand siger '15 min' eller 'time' – bruges når 'Prisperioder' er Auto.",
+          "wake_power_w": "Eleffekt under dette, mens rummet er for koldt, tæller som at anlægget ikke prøver."
+        }
       }
     },
     "error": {
@@ -385,6 +405,30 @@
       },
       "measured_cop": {
         "name": "COP (målt)"
+      },
+      "price_level": {
+        "name": "Prisniveau",
+        "state": {
+          "off": "Fra",
+          "unknown": "Ingen prognose",
+          "cheap": "Billig",
+          "normal": "Normal",
+          "expensive": "Dyr"
+        }
+      },
+      "wake_status": {
+        "name": "Vækning",
+        "state": {
+          "off": "Fra",
+          "busy": "Genstarter",
+          "not_running": "Varmer ikke",
+          "unit_not_on": "Anlæg ikke tændt",
+          "defrosting": "Afrimer",
+          "no_data": "Ingen data",
+          "on_target": "På mål",
+          "working": "Arbejder",
+          "stalled": "Slumrer – vækkes"
+        }
       }
     },
     "climate": {
@@ -458,6 +502,15 @@
       },
       "openings_enabled": {
         "name": "Reagér på døre og vinduer"
+      },
+      "price_control": {
+        "name": "Prisstyring"
+      },
+      "auto_wake": {
+        "name": "Vækning ved slumring"
+      },
+      "turbo": {
+        "name": "Turbo 30 min"
       }
     },
     "number": {
@@ -469,6 +522,12 @@
       },
       "opening_resume_after": {
         "name": "Dør/vindue: genoptag efter lukket"
+      },
+      "price_cheap_offset": {
+        "name": "Pris: op når billigt"
+      },
+      "price_expensive_offset": {
+        "name": "Pris: ned når dyrt"
       }
     }
   },
@@ -492,6 +551,13 @@
       "options": {
         "setpoint": "Målet (holder rummet)",
         "minimum": "Minimum (17 °C)"
+      }
+    },
+    "price_resolution": {
+      "options": {
+        "auto": "Auto",
+        "quarter": "Kvarter",
+        "hour": "Time"
       }
     }
   },

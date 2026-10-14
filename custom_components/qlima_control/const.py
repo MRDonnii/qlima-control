@@ -27,7 +27,32 @@ LIVE_KEYS = frozenset({
     "opening_min_delay_minutes",
     "opening_off_delay_minutes",
     "opening_resume_delay_minutes",
+    "price_control",
+    "price_cheap_offset",
+    "price_expensive_offset",
+    "auto_wake",
 })
+# Price steering, wake-up from the low-effort hold, turbo (1.4).
+CONF_PRICE_CONTROL = "price_control"
+CONF_PRICE_CHEAP_OFFSET = "price_cheap_offset"
+CONF_PRICE_EXPENSIVE_OFFSET = "price_expensive_offset"
+CONF_PRICE_RESOLUTION = "price_resolution"  # auto | quarter | hour
+CONF_PRICE_RESOLUTION_ENTITY = "price_resolution_entity"  # e.g. a select saying "15 min"/"time"
+DEFAULT_PRICE_CHEAP_OFFSET = 1
+DEFAULT_PRICE_EXPENSIVE_OFFSET = 1
+CONF_AUTO_WAKE = "auto_wake"
+CONF_WAKE_POWER_W = "wake_power_w"
+CONF_WAKE_MINUTES = "wake_minutes"
+CONF_WAKE_DEFICIT = "wake_deficit"
+DEFAULT_WAKE_POWER_W = 300
+DEFAULT_WAKE_MINUTES = 45
+DEFAULT_WAKE_DEFICIT = 0.7
+WAKE_MAX_PER_DAY = 3
+WAKE_COOLDOWN_MINUTES = 120
+TURBO_MINUTES = 30
+# After a power-cycle the unit may come back in another mode; that is not a
+# remote-control command. The thermostat repairs the mode once this has passed.
+POWER_CYCLE_GUARD_SECONDS = 240
 CONF_POWER_SWITCH = "power_switch"  # e.g. the Shelly relay feeding the unit
 CONF_AUTO_POWER_CYCLE_MINUTES = "auto_power_cycle_minutes"  # 0 = off
 POWER_CYCLE_OFF_SECONDS = 30

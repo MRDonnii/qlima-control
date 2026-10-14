@@ -18,6 +18,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     thermostat = hass.data[DOMAIN].get(entry.entry_id)
     stats = hass.data[DOMAIN].get(f"{entry.entry_id}_stats")
     feeder = hass.data[DOMAIN].get(f"{entry.entry_id}_feeder")
+    price = hass.data[DOMAIN].get(f"{entry.entry_id}_price")
+    wake = hass.data[DOMAIN].get(f"{entry.entry_id}_wake")
     states = {}
     if unit is not None:
         for entity_id in unit.watched():
@@ -40,5 +42,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         },
         "thermostat": None if thermostat is None else {"hvac_mode": thermostat.hvac_mode, **thermostat.extra_state_attributes},
         "stats": stats.data if stats else None,
+        "price": None if price is None else {"level": price.level, **price.attributes()},
+        "wake": None if wake is None else {"wakes_today": wake.wakes_today, **wake.attributes()},
         "linked_states": states,
     }

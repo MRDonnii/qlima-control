@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+- **Price steering**: the target goes a whole degree up in cheap periods and down in expensive ones (cooling the other way), ranked against the forecast from 6 h back to 24 h ahead and held at least 30 minutes. Reads Strømligning, Nord Pool, Energi Data Service, Tibber-style and generic price forecasts; quarter or hour periods, or follow a select.
+- **Wake-up**: optional power-cycle when the unit idles on low power while the room stays below target (Midea units drop to a low-effort hold that only a power cycle clears). At most 3 a day, 2 hours apart, never during defrost or when the unit should not run.
+- **Turbo 30 min** switch: the unit's boost preset for half an hour.
+- After any power-cycle (button, auto-restart or wake-up) the unit coming back in another mode is no longer taken for a remote-control stop; the mode is repaired.
+- New entities: Price level, Wake-up, Price steering, Wake when idling, Turbo 30 min, Price: up when cheap / down when expensive. New settings page *Price and wake-up*.
+
 ## 1.3.1
 - Finds the ESPHome device through `config_entry_id` on Home Assistant 2026.10+ (removes the deprecation warning about `DeviceEntry.config_entries`).
 

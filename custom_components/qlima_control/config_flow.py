@@ -67,11 +67,25 @@ from .const import (
     MODEL_P_MAX,
     OPENING_REDUCE_MINIMUM,
     OPENING_REDUCE_SETPOINT,
+    CONF_AUTO_WAKE,
+    CONF_PRICE_CHEAP_OFFSET,
+    CONF_PRICE_CONTROL,
+    CONF_PRICE_EXPENSIVE_OFFSET,
+    CONF_PRICE_RESOLUTION,
+    CONF_PRICE_RESOLUTION_ENTITY,
+    CONF_WAKE_DEFICIT,
+    CONF_WAKE_MINUTES,
+    CONF_WAKE_POWER_W,
+    DEFAULT_PRICE_CHEAP_OFFSET,
+    DEFAULT_PRICE_EXPENSIVE_OFFSET,
+    DEFAULT_WAKE_DEFICIT,
+    DEFAULT_WAKE_MINUTES,
+    DEFAULT_WAKE_POWER_W,
 )
 from .unit import esp_entities
 
 SECTIONS = ("sensors", "power", "openings", "control", "notifications", "advanced")
-MENU = ["device", "sensors", "power", "openings", "control", "notifications", "advanced"]
+MENU = ["device", "sensors", "power", "openings", "control", "smart", "notifications", "advanced"]
 
 
 def _entities(domain, device_class=None, multiple=False):
@@ -157,6 +171,20 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             vol.Required(CONF_SETPOINT_COMPENSATION, default=d.get(CONF_SETPOINT_COMPENSATION, False)): bool,
             _opt("presence_entity", d): _entities(["person", "group", "binary_sensor", "alarm_control_panel", "input_boolean", "zone"]),
             vol.Required("away_setback", default=d.get("away_setback", 3)): _number(0, 10, 1, "°C"),
+        }
+    if name == "smart":
+        return {
+            vol.Required(CONF_PRICE_CONTROL, default=d.get(CONF_PRICE_CONTROL, False)): bool,
+            vol.Required(CONF_PRICE_CHEAP_OFFSET, default=d.get(CONF_PRICE_CHEAP_OFFSET, DEFAULT_PRICE_CHEAP_OFFSET)): _number(0, 2, 1, "°C"),
+            vol.Required(CONF_PRICE_EXPENSIVE_OFFSET, default=d.get(CONF_PRICE_EXPENSIVE_OFFSET, DEFAULT_PRICE_EXPENSIVE_OFFSET)): _number(0, 2, 1, "°C"),
+            vol.Required(CONF_PRICE_RESOLUTION, default=d.get(CONF_PRICE_RESOLUTION, "auto")): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=["auto", "quarter", "hour"], translation_key="price_resolution")
+            ),
+            _opt(CONF_PRICE_RESOLUTION_ENTITY, d): _entities(["select", "input_select", "sensor"]),
+            vol.Required(CONF_AUTO_WAKE, default=d.get(CONF_AUTO_WAKE, False)): bool,
+            vol.Required(CONF_WAKE_POWER_W, default=d.get(CONF_WAKE_POWER_W, DEFAULT_WAKE_POWER_W)): _number(50, 1500, 10, "W"),
+            vol.Required(CONF_WAKE_MINUTES, default=d.get(CONF_WAKE_MINUTES, DEFAULT_WAKE_MINUTES)): _number(15, 240, 5, "min"),
+            vol.Required(CONF_WAKE_DEFICIT, default=d.get(CONF_WAKE_DEFICIT, DEFAULT_WAKE_DEFICIT)): _number(0.3, 3.0, 0.1, "°C"),
         }
     if name == "notifications":
         return {
@@ -320,6 +348,9 @@ class QlimaControlOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_notifications(self, user_input=None):
         return await self._group("notifications", user_input)
+
+    async def async_step_smart(self, user_input=None):
+        return await self._group("smart", user_input)
 
     async def async_step_advanced(self, user_input=None):
         return await self._group("advanced", user_input)

@@ -173,6 +173,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._last_pump_command = 0.0
         self._observed_pump_target: float | None = None
         self._startup_time = time()
+        self._power_guard_until = 0.0
         self._started = False
         self._load_config()
 
@@ -365,6 +366,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "temperature_sensors": self._sensors,
             "away": self.is_away(),
             "effective_heat_target": self._eff_heat(),
+            "effective_cool_target": self._eff_cool(),
+            "price_offset": self._price_offset(self._active_mode == HVACMode.COOL),
             "active_mode": self._active_mode,
             "neutral_mode": self._neutral_mode,
             "pending_mode": self._pending_mode,
@@ -664,6 +667,9 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         # command.
         if time() - self._startup_time < _OPENING_STARTUP_GRACE_SECONDS:
             return
+        if time() < self._power_guard_until:
+            # The supply was cut by us; the mode is repaired when it is back.
+            return
         context = new_state.context
         user_command = (
             context is not None
@@ -723,11 +729,29 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         state = self.hass.states.get(self._presence) if self._presence else None
         return state is not None and state.state in AWAY_STATES
 
+    def _price_offset(self, cool: bool) -> int:
+        price = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_price")
+        return price.offset(cool) if price is not None else 0
+
     def _eff_heat(self) -> float:
-        return self._heat_target - (self._away_setback if self.is_away() else 0)
+        return self._heat_target - (self._away_setback if self.is_away() else 0) + self._price_offset(False)
 
     def _eff_cool(self) -> float:
-        return self._cool_target + (self._away_setback if self.is_away() else 0)
+        return self._cool_target + (self._away_setback if self.is_away() else 0) + self._price_offset(True)
+
+    def effective_target(self, mode: str) -> float:
+        """The target the thermostat regulates to right now (away and price included)."""
+        return self._eff_cool() if mode == HVACMode.COOL.value else self._eff_heat()
+
+    async def async_price_changed(self) -> None:
+        """The price level moved the effective target: regulate to the new one now."""
+        self._last_retarget = 0.0
+        self.async_write_ha_state()
+        await self._evaluate("price")
+
+    def suppress_manual_detection(self, seconds: float) -> None:
+        """Our own power-cycle: the unit may come back in another mode – that is not the remote."""
+        self._power_guard_until = time() + seconds
 
     def apply_live_settings(self) -> None:
         """Re-read settings changed from the switch/number entities without a reload."""

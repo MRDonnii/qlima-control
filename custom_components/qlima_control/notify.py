@@ -51,6 +51,12 @@ class QlimaNotifier:
                    f"{self.entry.title}: en dør eller et vindue har stået åbent, så varmepumpen er slukket. Den starter igen, når der har været lukket et stykke tid.",
                    "mdi:window-open-variant", "#f59e0b", once=False)
 
+    def notify_wake(self) -> None:
+        """Called when the unit was woken from its low-effort hold with a power-cycle."""
+        self._send("wake", "Varmepumpen er vækket",
+                   f"{self.entry.title} kørte på lavt blus, selv om rummet var for koldt. Strømmen er slået fra og til, så den arbejder igen.",
+                   "mdi:alarm-light-outline", "#f97316", once=False)
+
     @callback
     def _check(self, _now) -> None:
         online = self.unit.online()

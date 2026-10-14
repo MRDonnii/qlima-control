@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import CONF_AUTO_POWER_CYCLE_MINUTES, POWER_CYCLE_OFF_SECONDS
+from .const import CONF_AUTO_POWER_CYCLE_MINUTES, DOMAIN, POWER_CYCLE_GUARD_SECONDS, POWER_CYCLE_OFF_SECONDS
 from .unit import QlimaUnit
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +52,9 @@ class PowerControl:
             return
         self._cycling = True
         self._last_cycle = time()
+        thermostat = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id)
+        if thermostat is not None:
+            thermostat.suppress_manual_detection(POWER_CYCLE_OFF_SECONDS + POWER_CYCLE_GUARD_SECONDS)
         _LOGGER.warning("%s: power-cycling the unit (%s)", self.entry.title, reason)
         try:
             await self.hass.services.async_call("homeassistant", "turn_off", {"entity_id": self.unit.power_switch}, blocking=True)

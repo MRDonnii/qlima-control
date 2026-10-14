@@ -10,6 +10,7 @@ from .feeder import RoomFeeder
 from .notify import QlimaNotifier
 from .power import PowerControl
 from .repairs import schedule_checks
+from .smart import PriceControl, TurboControl, WakeControl
 from .stats import QlimaStats
 from .unit import QlimaUnit
 
@@ -28,10 +29,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][f"{entry.entry_id}_power"] = power
     feeder = RoomFeeder(hass, entry, unit)
     hass.data[DOMAIN][f"{entry.entry_id}_feeder"] = feeder
+    hass.data[DOMAIN][f"{entry.entry_id}_price"] = PriceControl(hass, entry, unit)
+    hass.data[DOMAIN][f"{entry.entry_id}_wake"] = WakeControl(hass, entry, unit)
+    hass.data[DOMAIN][f"{entry.entry_id}_turbo"] = TurboControl(hass, entry, unit)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     notifier.start()
     feeder.start()
     power.start()
+    hass.data[DOMAIN][f"{entry.entry_id}_price"].start()
+    hass.data[DOMAIN][f"{entry.entry_id}_wake"].start()
     entry.async_on_unload(schedule_checks(hass, entry))
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
@@ -46,6 +52,9 @@ async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     thermostat = hass.data[DOMAIN].get(entry.entry_id)
     if changed and changed <= LIVE_KEYS and thermostat is not None:
         unit.config = new
+        price = hass.data[DOMAIN].get(f"{entry.entry_id}_price")
+        if price is not None:
+            price.refresh(force=True)
         thermostat.apply_live_settings()
         return
     await hass.config_entries.async_reload(entry.entry_id)
@@ -56,7 +65,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     notifier = hass.data.get(DOMAIN, {}).get(f"{entry.entry_id}_notifier")
     if notifier is not None:
         notifier.stop()
-    for key in ("power", "stats"):
+    for key in ("power", "stats", "price", "wake", "turbo"):
         obj = hass.data.get(DOMAIN, {}).get(f"{entry.entry_id}_{key}")
         if obj is not None:
             obj.stop()
@@ -65,6 +74,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         feeder.stop()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        for key in (entry.entry_id, f"{entry.entry_id}_unit", f"{entry.entry_id}_notifier", f"{entry.entry_id}_feeder", f"{entry.entry_id}_power", f"{entry.entry_id}_stats"):
+        for key in (entry.entry_id, f"{entry.entry_id}_unit", f"{entry.entry_id}_notifier", f"{entry.entry_id}_feeder", f"{entry.entry_id}_power", f"{entry.entry_id}_stats", f"{entry.entry_id}_price", f"{entry.entry_id}_wake", f"{entry.entry_id}_turbo"):
             hass.data.get(DOMAIN, {}).pop(key, None)
     return unloaded
