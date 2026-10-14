@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.5
+- The room temperature is no longer reported as an error in the log right after a Home Assistant restart: while the ESP is still connecting, the value is skipped quietly and goes out with the next change or the one-minute resend.
+
 ## 1.7.4 (firmware 1.3.2)
 - Firmware: back to the 1.2.0 firmware (no automatic TX/RX swap, no echo filter) – after the 1.3.x firmware a unit stopped answering. The `qlima_uart` component stays in the repo but is no longer used.
 

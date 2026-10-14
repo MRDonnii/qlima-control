@@ -7,6 +7,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
@@ -90,7 +91,16 @@ class RoomFeeder:
     def _send(self, value: float) -> None:
         if not self.hass.services.has_service("esphome", self.action):
             return  # firmware without the action (older) – it reads the sensor itself
+        self.hass.async_create_task(self._push(value))
+
+    async def _push(self, value: float) -> None:
+        try:
+            await self.hass.services.async_call(
+                "esphome", self.action, {"temperature": value}, blocking=True
+            )
+        except HomeAssistantError as err:
+            # The ESP is offline or still connecting (typical right after a HA restart); the
+            # next change or the one-minute resend delivers the value.
+            _LOGGER.debug("Room temperature not sent to %s: %s", self.action, err)
+            return
         self._last = value
-        self.hass.async_create_task(
-            self.hass.services.async_call("esphome", self.action, {"temperature": value}, blocking=False)
-        )
