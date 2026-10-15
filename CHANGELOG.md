@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.7.6
+- The automatic TX/RX swap is removed for good – the `qlima_uart` component is deleted from the repository (firmware 1.3.2 already ran without it).
+
+## 1.7.6
 - **Fix: an ESP adopted in ESPHome dropped off Wi-Fi after "Install".** ESPHome builds the Wi-Fi into an adopted device's firmware, but the adopted package also carried the prebuilt image's online update – installing it put the prebuilt image on the ESP, which does not know that Wi-Fi.
   - The online update now only lives in `esphome/qlima-control-factory.yaml` (what the web installer and the online update are built from). Adopting imports `qlima-control-esp32c3.yaml` without it; rebuild adopted devices once from ESPHome Builder to drop it.
   - The Firmware entity only uses the online update on ESPs running the prebuilt image (node name `qlima-control-<mac>`). Other ESPs install through ESPHome Builder, or get a clear message.
@@ -10,7 +13,7 @@
 - The room temperature is no longer reported as an error in the log right after a Home Assistant restart: while the ESP is still connecting, the value is skipped quietly and goes out with the next change or the one-minute resend.
 
 ## 1.7.4 (firmware 1.3.2)
-- Firmware: back to the 1.2.0 firmware (no automatic TX/RX swap, no echo filter) – after the 1.3.x firmware a unit stopped answering. The `qlima_uart` component stays in the repo but is no longer used.
+- Firmware: back to the 1.2.0 firmware (no automatic TX/RX swap, no echo filter) – after the 1.3.x firmware a unit stopped answering. 
 
 ## 1.7.3 (firmware 1.3.1)
 - Firmware: **TX/RX found automatically.** When the white and green wires are the other way round, the ESP gets no answer, swaps TX/RX after 20 s (GPIO matrix, no rewiring) and remembers the way that works for the next start. When neither way answers it gives up after 6 tries and keeps the saved way. New diagnostic *UART-ben*: Normal / Byttet / Søger / Intet svar.
