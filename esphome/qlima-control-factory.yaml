@@ -42,3 +42,12 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
+
+# Home Assistant must identify the image by its contents, not its node name:
+# an ESPHome-adopted device can retain the same qlima-control-<mac> name.
+text_sensor:
+  - platform: template
+    name: Firmware channel
+    entity_category: diagnostic
+    lambda: return {"factory"};
+    update_interval: 60s

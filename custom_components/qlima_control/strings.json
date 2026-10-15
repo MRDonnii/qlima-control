@@ -663,7 +663,7 @@
       "message": "The unit did not take “{preset}”."
     },
     "install_own_yaml": {
-      "message": "This ESP is built from your own yaml (adopted in ESPHome): install the update from ESPHome Builder. The online update would install the prebuilt image, which does not know the Wi-Fi built into your firmware."
+      "message": "Cannot verify that this ESP runs the factory image, so the online update is blocked. If you adopted it in ESPHome, update from ESPHome Builder. Otherwise use the ESP's own Firmware update entity or reflash the latest factory image."
     }
   }
 }

@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_DEVICE, DOMAIN
 from .unit import QlimaUnit
 
 LATEST_FIRMWARE = "firmware_latest"  # hass.data[DOMAIN] key, set by the Firmware entity
-# The prebuilt image (web installer / online update) names itself qlima-control-<mac>.
-# Any other node name is a build from the user's own yaml, e.g. adopted in ESPHome.
-_FACTORY_NAME = re.compile(r"^qlima-control-[0-9a-f]{6}$")
+_FACTORY_CHANNEL_UID_SUFFIX = "/text_sensor/Firmware channel"
 
 ESP_STATUSES = ["online", "unit_silent", "update", "offline"]
 
@@ -60,8 +58,23 @@ def runs_prebuilt_image(hass: HomeAssistant, device_id: str | None) -> bool:
     Only then is the image's online update safe. A build from the user's own yaml
     has its Wi-Fi compiled in; the prebuilt image would not know it.
     """
-    name = esphome_node_name(hass, device_id)
-    return bool(name and _FACTORY_NAME.match(name))
+    marker = firmware_channel_entity(hass, device_id)
+    state = hass.states.get(marker) if marker else None
+    return state is not None and state.state == "factory"
+
+
+def firmware_channel_entity(hass: HomeAssistant, device_id: str | None) -> str | None:
+    """Factory-only marker. A node name cannot prove the build's provenance."""
+    if not device_id:
+        return None
+    for entity in er.async_entries_for_device(er.async_get(hass), device_id):
+        if (
+            entity.platform == "esphome"
+            and entity.domain == "sensor"
+            and str(entity.unique_id).endswith(_FACTORY_CHANNEL_UID_SUFFIX)
+        ):
+            return entity.entity_id
+    return None
 
 
 def esp_device(hass: HomeAssistant, unit: QlimaUnit) -> dr.DeviceEntry | None:
