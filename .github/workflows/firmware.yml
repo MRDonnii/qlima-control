@@ -7,9 +7,11 @@ name: Firmware
 # install it themselves when "Opdatér automatisk" is on.
 
 on:
+  pull_request:
+    paths: ["esphome/**", "docs/**", ".github/workflows/firmware.yml", "tests/check_ota_packages.py"]
   push:
     branches: [main]
-    paths: ["esphome/**", "docs/**", ".github/workflows/firmware.yml"]
+    paths: ["esphome/**", "docs/**", ".github/workflows/firmware.yml", "tests/check_ota_packages.py"]
   workflow_dispatch:
 
 permissions:
@@ -38,6 +40,8 @@ jobs:
       - name: Build firmware
         run: |
           pip install "esphome==2026.9.1"
+          python3 tests/check_ota_packages.py
+          esphome config esphome/qlima-control-esp32c3.yaml
           esphome compile esphome/qlima-control-factory.yaml
       - name: Assemble site
         env:
@@ -76,6 +80,7 @@ jobs:
           path: _site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:

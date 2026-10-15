@@ -21,7 +21,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import CONF_DEVICE, DOMAIN, SIGNAL_UPDATE
-from .esp import LATEST_FIRMWARE, firmware_version, newer, runs_prebuilt_image
+from .esp import (
+    LATEST_FIRMWARE,
+    firmware_channel_entity,
+    firmware_version,
+    newer,
+    runs_prebuilt_image,
+)
 from .entity import QlimaEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,10 +44,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class FirmwareUpdate(QlimaEntity, UpdateEntity):
     """Shows the ESP's firmware and whether a newer one is released.
 
-    Installing goes through the ESP's own update entity: the prebuilt image's
-    online update, or the ESPHome dashboard (rebuilds the device's own yaml). An ESP
-    built from its own yaml never gets the online update: it installs the prebuilt
-    image, which does not know the Wi-Fi compiled into that build.
+    Only a factory image with an explicit firmware-channel marker may install
+    the prebuilt OTA image. ESPHome-adopted devices update in Device Builder.
     """
 
     _attr_device_class = UpdateDeviceClass.FIRMWARE
@@ -60,24 +64,24 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
     def _esp_update(self) -> str | None:
         """The update entity that installs safely on this ESP.
 
-        Prebuilt image: its online update ("<mac>/n/update/…") first, else the ESPHome
-        dashboard. Own yaml: only the ESPHome dashboard, which rebuilds that yaml.
+        Fail closed for old images and adopted builds, even when their node name
+        looks like a factory name or they still expose a legacy online updater.
         """
-        if not self._device_id:
+        if not self._device_id or not runs_prebuilt_image(self.hass, self._device_id):
             return None
         found = [
             e
             for e in er.async_entries_for_device(er.async_get(self.hass), self._device_id)
-            if e.domain == "update"
+            if e.platform == "esphome"
+            and e.domain == "update"
+            and str(e.unique_id).endswith("/update/Firmware")
         ]
-        online = [e for e in found if "/update/" in str(e.unique_id)]
-        dashboard = [e for e in found if "/update/" not in str(e.unique_id)]
-        usable = online + dashboard if runs_prebuilt_image(self.hass, self._device_id) else dashboard
-        return usable[0].entity_id if usable else None
+        return found[0].entity_id if found else None
 
     def watched(self) -> list[str]:
+        marker = firmware_channel_entity(self.hass, self._device_id)
         esp = self._esp_update()
-        return [esp] if esp else []
+        return [entity for entity in (marker, esp) if entity]
 
     @property
     def installed_version(self) -> str | None:

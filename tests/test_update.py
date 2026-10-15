@@ -57,6 +57,12 @@ async def test_firmware_installs_through_the_esp(hass, esp_device):
     source = next(iter(hass.config_entries.async_entries("esphome")))
     hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-a1b2c3"})  # prebuilt image
     er.async_get(hass).async_get_or_create(
+        "sensor", "esphome", f"{MAC}/0/text_sensor/Firmware channel",
+        suggested_object_id="qlima_test_firmware_channel",
+        device_id=esp_device.id, config_entry=source,
+    )
+    hass.states.async_set("sensor.qlima_test_firmware_channel", "factory")
+    er.async_get(hass).async_get_or_create(
         "update", "esphome", f"{MAC}/0/update/Firmware", suggested_object_id="qlima_test_firmware",
         device_id=esp_device.id, config_entry=source,
     )
@@ -133,7 +139,8 @@ async def test_esp_status_and_diagnostics(hass, esp_device):
 async def test_own_yaml_never_gets_the_prebuilt_online_update(hass, esp_device):
     """Adopted in ESPHome: the online update would install an image without its Wi-Fi."""
     source = next(iter(hass.config_entries.async_entries("esphome")))
-    hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-koekken"})
+    # Adoption may retain the factory-looking node name and legacy updater.
+    hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-a1b2c3"})
     registry = er.async_get(hass)
     registry.async_get_or_create(
         "update", "esphome", f"{MAC}/0/update/Firmware", suggested_object_id="qlima_test_firmware",
@@ -145,16 +152,34 @@ async def test_own_yaml_never_gets_the_prebuilt_online_update(hass, esp_device):
     assert not entity.supported_features
     with pytest.raises(HomeAssistantError):
         await entity.async_install(None, False)
-    # With the ESPHome dashboard's update entity it installs through that one.
+    # A dashboard entity cannot be mistaken for a safe firmware source.
     registry.async_get_or_create(
         "update", "esphome", f"{MAC}-dashboard", suggested_object_id="qlima_test_dashboard",
         device_id=esp_device.id, config_entry=source,
     )
-    calls = []
+    assert not entity.supported_features
+    with pytest.raises(HomeAssistantError):
+        await entity.async_install(None, False)
 
-    async def install(call):
-        calls.append(call.data["entity_id"])
 
-    hass.services.async_register("update", "install", install)
-    await entity.async_install(None, False)
-    assert calls == ["update.qlima_test_dashboard"]
+async def test_factory_marker_must_be_current(hass, esp_device):
+    source = next(iter(hass.config_entries.async_entries("esphome")))
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor", "esphome", f"{MAC}/0/text_sensor/Firmware channel",
+        suggested_object_id="qlima_test_firmware_channel",
+        device_id=esp_device.id, config_entry=source,
+    )
+    registry.async_get_or_create(
+        "update", "esphome", f"{MAC}/0/update/Firmware",
+        suggested_object_id="qlima_test_firmware",
+        device_id=esp_device.id, config_entry=source,
+    )
+    with patch.object(q_update.FirmwareUpdate, "_check", return_value=None):
+        await _setup(hass, esp_device)
+    entity = await _entity(hass)
+    assert not entity.supported_features  # marker has not reported in yet
+    hass.states.async_set("sensor.qlima_test_firmware_channel", "factory")
+    assert entity.supported_features
+    hass.states.async_set("sensor.qlima_test_firmware_channel", "unavailable")
+    assert not entity.supported_features

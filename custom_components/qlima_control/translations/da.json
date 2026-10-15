@@ -663,7 +663,7 @@
       "message": "Anlægget tog ikke imod “{preset}”."
     },
     "install_own_yaml": {
-      "message": "Denne ESP er bygget fra din egen yaml (adopteret i ESPHome): installér opdateringen fra ESPHome Builder. Online-opdateringen ville installere det færdige image, som ikke kender den WiFi-kode, der er bygget ind i din firmware."
+      "message": "Det kan ikke bekræftes, at denne ESP kører fabriksimaget, så online-opdatering er blokeret. Er den adopteret i ESPHome, skal du opdatere i ESPHome Builder. Ellers brug ESP'ens egen Firmware-entitet eller flash det nyeste fabriksimage igen."
     }
   }
 }
