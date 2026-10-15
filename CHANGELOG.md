@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.9 (firmware 1.3.4)
+- Firmware: Wi-Fi power saving is off (`power_save_mode: none`) – the radio no longer sleeps between packets, which delayed commands and gave short drop-outs. The ESP is powered by the unit, so the extra draw does not matter.
+
 ## 1.7.8 (firmware 1.3.3)
 - The integration permits its prebuilt OTA install only when a live, factory-only firmware marker confirms the ESP runs the prebuilt image. A factory-looking node name or an old online update entity no longer suffices.
 - Firmware 1.3.3 publishes the marker. Older images without it fail closed in the integration; factory devices can still update through their own ESPHome Firmware entity or the web installer.
