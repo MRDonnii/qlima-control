@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.6
+- **Fix: an ESP adopted in ESPHome dropped off Wi-Fi after "Install".** ESPHome builds the Wi-Fi into an adopted device's firmware, but the adopted package also carried the prebuilt image's online update – installing it put the prebuilt image on the ESP, which does not know that Wi-Fi.
+  - The online update now only lives in `esphome/qlima-control-factory.yaml` (what the web installer and the online update are built from). Adopting imports `qlima-control-esp32c3.yaml` without it; rebuild adopted devices once from ESPHome Builder to drop it.
+  - The Firmware entity only uses the online update on ESPs running the prebuilt image (node name `qlima-control-<mac>`). Other ESPs install through ESPHome Builder, or get a clear message.
+- An ESP that cannot reach its Wi-Fi opens the hotspot **Qlima Control** (password `qlimacontrol`) after a minute; choose the Wi-Fi on the page that opens (or http://192.168.4.1). It keeps trying the old network meanwhile.
+
 ## 1.7.5
 - The room temperature is no longer reported as an error in the log right after a Home Assistant restart: while the ESP is still connecting, the value is skipped quietly and goes out with the next change or the one-minute resend.
 

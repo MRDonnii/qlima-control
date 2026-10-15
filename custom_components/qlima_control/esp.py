@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -11,6 +12,9 @@ from .const import CONF_DEVICE, DOMAIN
 from .unit import QlimaUnit
 
 LATEST_FIRMWARE = "firmware_latest"  # hass.data[DOMAIN] key, set by the Firmware entity
+# The prebuilt image (web installer / online update) names itself qlima-control-<mac>.
+# Any other node name is a build from the user's own yaml, e.g. adopted in ESPHome.
+_FACTORY_NAME = re.compile(r"^qlima-control-[0-9a-f]{6}$")
 
 ESP_STATUSES = ["online", "unit_silent", "update", "offline"]
 
@@ -34,6 +38,30 @@ def newer(latest: str | None, installed: str | None) -> bool:
         return version_key(latest) > version_key(installed)
     except ValueError:
         return False
+
+
+def esphome_node_name(hass: HomeAssistant, device_id: str | None) -> str | None:
+    """The ESPHome node name of the device (e.g. 'qlima-control-393058')."""
+    device = dr.async_get(hass).async_get(device_id) if device_id else None
+    if device is None:
+        return None
+    # HA 2026.10+ has one config entry per device (config_entry_id); older versions a set.
+    entry_id = getattr(device, "config_entry_id", None)
+    for entry_id in [entry_id] if entry_id else list(device.config_entries):
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry is not None and entry.domain == "esphome":
+            return entry.data.get("device_name")
+    return None
+
+
+def runs_prebuilt_image(hass: HomeAssistant, device_id: str | None) -> bool:
+    """The ESP runs the prebuilt image, whose Wi-Fi is saved on the ESP itself.
+
+    Only then is the image's online update safe. A build from the user's own yaml
+    has its Wi-Fi compiled in; the prebuilt image would not know it.
+    """
+    name = esphome_node_name(hass, device_id)
+    return bool(name and _FACTORY_NAME.match(name))
 
 
 def esp_device(hass: HomeAssistant, unit: QlimaUnit) -> dr.DeviceEntry | None:

@@ -1,0 +1,44 @@
+# Qlima Control – det færdige image til ESP32-C3 (webinstalleren og online-opdateringer).
+# = qlima-control-esp32c3.yaml + online-opdatering. Kun til ESP'er der kører dette image,
+# hvor WiFi er sat op via hotspottet "Qlima Control" eller webinstalleren (gemt i ESP'en).
+#
+# Adopterer du ESP'en i ESPHome, importeres qlima-control-esp32c3.yaml – uden online-
+# opdatering: den ville installere dette image, som ikke kender den WiFi-kode ESPHome
+# bygger ind i din egen firmware, og ESP'en kom ikke på nettet igen.
+
+packages:
+  base: !include qlima-control-esp32c3.yaml
+
+dashboard_import:
+  package_import_url: github://MRDonnii/qlima-control/esphome/qlima-control-esp32c3.yaml@main
+  import_full_config: false
+
+ota:
+  - platform: http_request
+
+http_request:
+  verify_ssl: true
+
+update:
+  - platform: http_request
+    id: firmware_update
+    name: Firmware
+    source: https://mrdonnii.github.io/qlima-control/firmware/qlima-control-esp32c3.manifest.json
+    update_interval: 6h
+    on_update_available:
+      - if:
+          condition:
+            switch.is_on: auto_update
+          then:
+            - delay: 10min   # lad en ny udgivelse falde på plads først
+            - update.perform:
+                id: firmware_update
+
+switch:
+  - platform: template
+    id: auto_update
+    name: Opdatér automatisk
+    icon: mdi:update
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config

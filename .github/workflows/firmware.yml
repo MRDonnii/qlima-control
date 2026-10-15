@@ -38,7 +38,7 @@ jobs:
       - name: Build firmware
         run: |
           pip install "esphome==2026.9.1"
-          esphome compile esphome/qlima-control-esp32c3.yaml
+          esphome compile esphome/qlima-control-factory.yaml
       - name: Assemble site
         env:
           VERSION: ${{ steps.v.outputs.version }}

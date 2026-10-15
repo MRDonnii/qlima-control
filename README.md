@@ -122,7 +122,11 @@ Med to DS18B20-følere måler Qlima Control den varme, anlægget faktisk afgiver
 
 ESP'en tjekker repoet hver 6. time. Med kontakten **"Opdatér automatisk"** (slået til som standard) installerer den selv en ny firmware over WiFi. Slår du den fra, viser Home Assistant i stedet **"Firmware – opdatering tilgængelig"**, og du trykker selv *Installér*. Firmwaren udgives kun, når der faktisk er ændret noget i den.
 
-Hver Qlima Control-enhed har også en **Firmware**-entitet, der viser hvilken version ESP'en kører, og om der er en nyere udgivelse. *Installér* her bruger ESP'ens egen opdatering – eller ESPHome-dashboardet, hvis du bygger fra din egen yaml. Bygger du selv, så lad være med at sætte `project:` i din yaml; versionen kommer fra den fælles pakke.
+Hver Qlima Control-enhed har også en **Firmware**-entitet, der viser hvilken version ESP'en kører, og om der er en nyere udgivelse. *Installér* her bruger ESP'ens egen online-opdatering, når den kører det færdige image – og ESPHome Builder, når den er adopteret/bygget fra din egen yaml.
+
+> **Adopteret i ESPHome?** Så er din WiFi-kode bygget ind i firmwaren, og du skal altid opdatere fra ESPHome Builder. Online-opdateringen (det færdige image) kender ikke din WiFi. Fra 1.7.6 får adopterede enheder den ikke med; byg dem én gang fra ESPHome Builder for at fjerne den.
+
+**Mister ESP'en WiFi**, åbner den efter ca. 1 minut hotspottet **"Qlima Control"** (kode `qlimacontrol`). Forbind med telefonen, og vælg WiFi på siden der åbner (eller http://192.168.4.1). Den prøver det gamle netværk i baggrunden imens. Bygger du selv, så lad være med at sætte `project:` i din yaml; versionen kommer fra den fælles pakke.
 
 Integrationen opdateres gennem HACS som alle andre.
 

@@ -14,13 +14,14 @@ from homeassistant.components.update import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import CONF_DEVICE, DOMAIN, SIGNAL_UPDATE
-from .esp import LATEST_FIRMWARE, firmware_version, newer
+from .esp import LATEST_FIRMWARE, firmware_version, newer, runs_prebuilt_image
 from .entity import QlimaEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,9 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
     """Shows the ESP's firmware and whether a newer one is released.
 
     Installing goes through the ESP's own update entity: the prebuilt image's
-    online update, or the ESPHome dashboard (rebuilds the device's own yaml).
+    online update, or the ESPHome dashboard (rebuilds the device's own yaml). An ESP
+    built from its own yaml never gets the online update: it installs the prebuilt
+    image, which does not know the Wi-Fi compiled into that build.
     """
 
     _attr_device_class = UpdateDeviceClass.FIRMWARE
@@ -55,7 +58,11 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
         return self.unit.config.get(CONF_DEVICE)
 
     def _esp_update(self) -> str | None:
-        """The ESP device's own update entity – its online update first."""
+        """The update entity that installs safely on this ESP.
+
+        Prebuilt image: its online update ("<mac>/n/update/…") first, else the ESPHome
+        dashboard. Own yaml: only the ESPHome dashboard, which rebuilds that yaml.
+        """
         if not self._device_id:
             return None
         found = [
@@ -63,8 +70,10 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
             for e in er.async_entries_for_device(er.async_get(self.hass), self._device_id)
             if e.domain == "update"
         ]
-        found.sort(key=lambda e: "/update/" not in str(e.unique_id))
-        return found[0].entity_id if found else None
+        online = [e for e in found if "/update/" in str(e.unique_id)]
+        dashboard = [e for e in found if "/update/" not in str(e.unique_id)]
+        usable = online + dashboard if runs_prebuilt_image(self.hass, self._device_id) else dashboard
+        return usable[0].entity_id if usable else None
 
     def watched(self) -> list[str]:
         esp = self._esp_update()
@@ -101,12 +110,17 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"newest_release": self._latest, "esp_update_entity": self._esp_update()}
+        return {
+            "newest_release": self._latest,
+            "esp_update_entity": self._esp_update(),
+            "prebuilt_image": runs_prebuilt_image(self.hass, self._device_id),
+        }
 
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
         esp = self._esp_update()
-        if esp:
-            await self.hass.services.async_call("update", "install", {"entity_id": esp}, blocking=True)
+        if not esp:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="install_own_yaml")
+        await self.hass.services.async_call("update", "install", {"entity_id": esp}, blocking=True)
 
     async def _check(self, _now=None) -> None:
         try:

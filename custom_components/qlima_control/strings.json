@@ -661,6 +661,9 @@
     },
     "preset_not_accepted": {
       "message": "The unit did not take “{preset}”."
+    },
+    "install_own_yaml": {
+      "message": "This ESP is built from your own yaml (adopted in ESPHome): install the update from ESPHome Builder. The online update would install the prebuilt image, which does not know the Wi-Fi built into your firmware."
     }
   }
 }

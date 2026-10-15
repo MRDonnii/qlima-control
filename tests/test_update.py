@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
+from homeassistant.exceptions import HomeAssistantError
+
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.qlima_control import update as q_update
@@ -51,6 +55,7 @@ async def test_firmware_shows_installed_and_newest(hass, esp_device):
 
 async def test_firmware_installs_through_the_esp(hass, esp_device):
     source = next(iter(hass.config_entries.async_entries("esphome")))
+    hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-a1b2c3"})  # prebuilt image
     er.async_get(hass).async_get_or_create(
         "update", "esphome", f"{MAC}/0/update/Firmware", suggested_object_id="qlima_test_firmware",
         device_id=esp_device.id, config_entry=source,
@@ -123,3 +128,33 @@ async def test_esp_status_and_diagnostics(hass, esp_device):
     await hass.async_block_till_done()
     assert _state(hass, "sensor", "esp_status").state == "offline"
     assert _state(hass, "binary_sensor", "esp_connected").state == "off"
+
+
+async def test_own_yaml_never_gets_the_prebuilt_online_update(hass, esp_device):
+    """Adopted in ESPHome: the online update would install an image without its Wi-Fi."""
+    source = next(iter(hass.config_entries.async_entries("esphome")))
+    hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-koekken"})
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "update", "esphome", f"{MAC}/0/update/Firmware", suggested_object_id="qlima_test_firmware",
+        device_id=esp_device.id, config_entry=source,
+    )
+    with patch.object(q_update.FirmwareUpdate, "_check", return_value=None):
+        await _setup(hass, esp_device)
+    entity = await _entity(hass)
+    assert not entity.supported_features
+    with pytest.raises(HomeAssistantError):
+        await entity.async_install(None, False)
+    # With the ESPHome dashboard's update entity it installs through that one.
+    registry.async_get_or_create(
+        "update", "esphome", f"{MAC}-dashboard", suggested_object_id="qlima_test_dashboard",
+        device_id=esp_device.id, config_entry=source,
+    )
+    calls = []
+
+    async def install(call):
+        calls.append(call.data["entity_id"])
+
+    hass.services.async_register("update", "install", install)
+    await entity.async_install(None, False)
+    assert calls == ["update.qlima_test_dashboard"]
