@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (firmware 1.3.3)
+## 1.7.8 (firmware 1.3.3)
 - The integration permits its prebuilt OTA install only when a live, factory-only firmware marker confirms the ESP runs the prebuilt image. A factory-looking node name or an old online update entity no longer suffices.
 - Firmware 1.3.3 publishes the marker. Older images without it fail closed in the integration; factory devices can still update through their own ESPHome Firmware entity or the web installer.
 - Firmware CI validates both the factory and adopted configurations and checks that the adopted package cannot import the prebuilt OTA updater.
