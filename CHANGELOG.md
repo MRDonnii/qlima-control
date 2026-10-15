@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.7.6
+## 1.7.7
 - The automatic TX/RX swap is removed for good – the `qlima_uart` component is deleted from the repository (firmware 1.3.2 already ran without it).
 
 ## 1.7.6
