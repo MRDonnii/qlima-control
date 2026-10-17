@@ -663,7 +663,7 @@
       "message": "The unit did not take “{preset}”."
     },
     "install_own_yaml": {
-      "message": "Cannot verify that this ESP runs the factory image, so the online update is blocked. If you adopted it in ESPHome, update from ESPHome Builder. Otherwise use the ESP's own Firmware update entity or reflash the latest factory image."
+      "message": "Cannot verify that this ESP runs the factory image, and ESPHome Builder does not know it. If you adopted it in ESPHome, update it from ESPHome Builder (or enable the device's ESPHome update entity to install from here). Otherwise flash the latest factory image with the web installer – without erasing."
     }
   }
 }

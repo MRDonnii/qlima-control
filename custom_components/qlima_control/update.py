@@ -44,8 +44,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class FirmwareUpdate(QlimaEntity, UpdateEntity):
     """Shows the ESP's firmware and whether a newer one is released.
 
-    Only a factory image with an explicit firmware-channel marker may install
-    the prebuilt OTA image. ESPHome-adopted devices update in Device Builder.
+    Two install paths, never mixed:
+    - factory image (explicit firmware-channel marker): the ESP's own online update,
+      which installs the prebuilt image (Wi-Fi is kept in the ESP's own storage);
+    - adopted in ESPHome: Home Assistant's ESPHome Builder update for the device,
+      which builds the user's own yaml (with its Wi-Fi and key) and uploads it –
+      exactly what "Install" in ESPHome Builder does. The prebuilt image is never
+      put on an adopted ESP.
     """
 
     _attr_device_class = UpdateDeviceClass.FIRMWARE
@@ -64,24 +69,48 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
     def _esp_update(self) -> str | None:
         """The update entity that installs safely on this ESP.
 
-        Fail closed for old images and adopted builds, even when their node name
-        looks like a factory name or they still expose a legacy online updater.
+        Factory image: the ESP's own online update. Anything else: only the
+        ESPHome Builder update, which builds the device's own yaml. A legacy
+        online updater on an adopted ESP is never used.
         """
-        if not self._device_id or not runs_prebuilt_image(self.hass, self._device_id):
+        if not self._device_id:
             return None
-        found = [
-            e
-            for e in er.async_entries_for_device(er.async_get(self.hass), self._device_id)
-            if e.platform == "esphome"
-            and e.domain == "update"
-            and str(e.unique_id).endswith("/update/Firmware")
-        ]
-        return found[0].entity_id if found else None
+        if runs_prebuilt_image(self.hass, self._device_id):
+            found = [
+                e
+                for e in er.async_entries_for_device(er.async_get(self.hass), self._device_id)
+                if e.platform == "esphome"
+                and e.domain == "update"
+                and str(e.unique_id).endswith("/update/Firmware")
+            ]
+            return found[0].entity_id if found else None
+        builder = self._builder_entry()
+        return builder.entity_id if builder is not None and builder.disabled_by is None else None
+
+    def _builder_entry(self) -> er.RegistryEntry | None:
+        """Home Assistant's ESPHome Builder update for this device (its unique id is the MAC)."""
+        device = dr.async_get(self.hass).async_get(self._device_id) if self._device_id else None
+        if device is None:
+            return None
+        macs = {str(value).lower() for kind, value in device.connections if kind == dr.CONNECTION_NETWORK_MAC}
+        for entry in er.async_entries_for_device(
+            er.async_get(self.hass), self._device_id, include_disabled_entities=True
+        ):
+            if entry.platform == "esphome" and entry.domain == "update" and str(entry.unique_id).lower() in macs:
+                return entry
+        return None
+
+    @property
+    def install_path(self) -> str | None:
+        if not self._esp_update():
+            return None
+        return "online_image" if runs_prebuilt_image(self.hass, self._device_id) else "esphome_builder"
 
     def watched(self) -> list[str]:
         marker = firmware_channel_entity(self.hass, self._device_id)
         esp = self._esp_update()
-        return [entity for entity in (marker, esp) if entity]
+        builder = self._builder_entry()
+        return [entity for entity in (marker, esp, builder.entity_id if builder else None) if entity]
 
     @property
     def installed_version(self) -> str | None:
@@ -118,6 +147,7 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
             "newest_release": self._latest,
             "esp_update_entity": self._esp_update(),
             "prebuilt_image": runs_prebuilt_image(self.hass, self._device_id),
+            "install_path": self.install_path,
         }
 
     async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
@@ -154,3 +184,14 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
         )
         self.async_on_remove(async_track_time_interval(self.hass, self._check, _CHECK_EVERY))
         self.hass.async_create_task(self._check())
+        self._enable_builder_update()
+
+    @callback
+    def _enable_builder_update(self) -> None:
+        """An adopted ESP updates through ESPHome Builder; HA hides that entity by default."""
+        if runs_prebuilt_image(self.hass, self._device_id):
+            return
+        builder = self._builder_entry()
+        if builder is not None and builder.disabled_by == er.RegistryEntryDisabler.INTEGRATION:
+            _LOGGER.info("%s: enabling %s so the firmware can be installed from ESPHome Builder", self.entry.title, builder.entity_id)
+            er.async_get(self.hass).async_update_entity(builder.entity_id, disabled_by=None)

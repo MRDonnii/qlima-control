@@ -162,6 +162,43 @@ async def test_own_yaml_never_gets_the_prebuilt_online_update(hass, esp_device):
         await entity.async_install(None, False)
 
 
+async def test_adopted_esp_installs_through_esphome_builder(hass, esp_device):
+    """Adopted ESP: install = ESPHome Builder builds the user's own yaml (Wi-Fi kept)."""
+    source = next(iter(hass.config_entries.async_entries("esphome")))
+    hass.config_entries.async_update_entry(source, data={"device_name": "qlima-control-koekken"})
+    registry = er.async_get(hass)
+    # The legacy online updater must stay unused even if present.
+    registry.async_get_or_create(
+        "update", "esphome", f"{MAC}/0/update/Firmware", suggested_object_id="qlima_test_firmware",
+        device_id=esp_device.id, config_entry=source,
+    )
+    # HA's ESPHome Builder update: unique id = the MAC, disabled by default.
+    builder = registry.async_get_or_create(
+        "update", "esphome", MAC.upper(), suggested_object_id="qlima_test_builder",
+        device_id=esp_device.id, config_entry=source,
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+    dr.async_get(hass).async_update_device(esp_device.id, sw_version="1.3.3 (ESPHome 2026.9.1)")
+    calls = []
+
+    async def install(call):
+        calls.append(call.data["entity_id"])
+
+    with patch.object(q_update.FirmwareUpdate, "_check", return_value=None):
+        await _setup(hass, esp_device)
+    hass.services.async_register("update", "install", install)
+    # Setup enabled the Builder update so the firmware can be installed from HA.
+    assert registry.async_get(builder.entity_id).disabled_by is None
+    entity = await _entity(hass)
+    entity._latest = "1.3.4"
+    entity.async_write_ha_state()
+    state = _state(hass, "update", "firmware")
+    assert state.state == "on" and state.attributes["install_path"] == "esphome_builder"
+    assert entity.supported_features
+    await entity.async_install(None, False)
+    assert calls == [builder.entity_id]  # never the prebuilt online image
+
+
 async def test_factory_marker_must_be_current(hass, esp_device):
     source = next(iter(hass.config_entries.async_entries("esphome")))
     registry = er.async_get(hass)

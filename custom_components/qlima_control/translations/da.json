@@ -663,7 +663,7 @@
       "message": "Anlægget tog ikke imod “{preset}”."
     },
     "install_own_yaml": {
-      "message": "Det kan ikke bekræftes, at denne ESP kører fabriksimaget, så online-opdatering er blokeret. Er den adopteret i ESPHome, skal du opdatere i ESPHome Builder. Ellers brug ESP'ens egen Firmware-entitet eller flash det nyeste fabriksimage igen."
+      "message": "Det kan ikke bekræftes, at denne ESP kører fabriksimaget, og ESPHome Builder kender den ikke. Er den adopteret i ESPHome, så opdatér den i ESPHome Builder (eller slå enhedens ESPHome-opdatering til, så kan den installeres herfra). Ellers flash det nyeste fabriksimage med webinstalleren – uden at slette."
     }
   }
 }

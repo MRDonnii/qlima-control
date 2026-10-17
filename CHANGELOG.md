@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.10
+- **ESPs adopted in ESPHome can be updated from Home Assistant again.** The Firmware entity installs through Home Assistant's ESPHome Builder update for the device, which builds your own yaml (with its Wi-Fi and encryption key) and uploads it – the same as *Install* in ESPHome Builder. Wi-Fi and settings are kept.
+  - Home Assistant creates that ESPHome Builder entity disabled; Qlima Control enables it for adopted Qlima ESPs.
+  - Factory images still use only their own online update. The prebuilt image is never installed on an adopted ESP.
+  - New attribute `install_path` (`online_image` / `esphome_builder`).
+
 ## 1.7.9 (firmware 1.3.4)
 - Firmware: Wi-Fi power saving is off (`power_save_mode: none`) – the radio no longer sleeps between packets, which delayed commands and gave short drop-outs. The ESP is powered by the unit, so the extra draw does not matter.
 
