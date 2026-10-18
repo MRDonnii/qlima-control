@@ -88,19 +88,42 @@ _TARGET_CONFIRM_SECONDS = 10
 _TARGET_CONFIRM_ATTEMPTS = 4
 # While heating/cooling, re-check the compensated unit target this often.
 _RETARGET_SECONDS = 300
-# Follow Me reaches the unit in whole degrees, and the unit starts a degree below its
-# target and stops a degree above – on the true room temperature it lets the room
-# drift ±0.5 K. While it regulates, the value sent is steered instead:
-#   start (target −1, or the true room rounded away from the target when it is
-#     further off, so the unit sees the whole shortfall and works hard) once the
-#     room is _FM_START below, kept until the room reaches the target – full
-#     effort, no turning down before the target is reached;
-#   hold (the target) from there – a running unit modulates, a stopped one stays off;
-#   stop (target +1) once the room is _FM_STOP above – off before +0.5 K – kept
-#     until the room is _FM_START below again.
-# The unit's own target never changes.
+# Follow Me reaches the unit in whole degrees. While the unit regulates on it, the
+# value sent is steered from the room sensor (0.1 K) instead of passed through:
+#   start – room _FM_START below the target: the unit is told the room is at least a
+#           degree below its target (further when the room is further off), so it
+#           works – kept until the target is reached, no turning down before;
+#   hold  – at the target: the unit is told the room is exactly at its target and
+#           modulates (a stopped unit stays off);
+#   stop  – room _FM_STOP above the target: the unit is told the room is at least a
+#           degree above its target (further when it is), so the compressor stops –
+#           kept until the room is _FM_START below the target again.
+# Midea units do not all act on the Follow Me value as it is: some add their own
+# compensation in heat mode (an S 5232 told "a degree above" kept running at
+# ~630 W). So every value is shifted by a learned offset per unit and mode, learned
+# from whether the unit really works (compressor, else power) when it should:
+#   - in stop it must stop: still working after _FM_STOP_CHECK → offset +1 (and the
+#     offset is known to need at least that);
+#   - in hold a running unit must keep running: stopped for _FM_STOP_CHECK → the
+#     offset is too large → −1;
+#   - in start the room must come up: no _FM_PROGRESS within _FM_START_CHECK while
+#     _FM_START_SHORT short → the offset is too large (−1) if it may be lowered;
+#     otherwise the start value is pushed a degree further: for good when the unit
+#     did not even start (its own hysteresis is wider), for this start only when it
+#     works but too weakly.
+# If even _FM_OFFSET_MAX does not stop it, the unit's target is parked at its
+# neutral value during stop (guaranteed off) and restored at the next start.
+# Minimum run and off times keep the compressor from short cycling unless the room
+# is _FM_FORCE past the target. The unit's own target is the room target rounded.
 _FM_START = 0.2
 _FM_STOP = 0.3
+_FM_FORCE = 0.5
+_FM_OFFSET_MAX = 4
+_FM_BOOST_MAX = 3
+_FM_STOP_CHECK = 6 * 60
+_FM_START_CHECK = 15 * 60
+_FM_START_SHORT = 0.5
+_FM_PROGRESS = 0.2
 # Midea UART (ESPHome) silently drops a command that arrives while the
 # previous one is still waiting for the unit's reply, so pump commands are
 # serialised with a gap between them.
@@ -113,8 +136,13 @@ _SWING_HORIZONTAL = getattr(ClimateEntityFeature, "SWING_HORIZONTAL_MODE", None)
 
 
 def _whole(value: Any) -> float:
-    """Round a target to a whole degree, halves up (the heat pumps only take whole degrees)."""
+    """Round to a whole degree, halves up (the heat pumps only take whole degrees)."""
     return float(math.floor(float(value) + 0.5))
+
+
+def _half(value: Any) -> float:
+    """Round a room target to half a degree: the room sensor steers at 0.1 K."""
+    return math.floor(float(value) * 2 + 0.5) / 2
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
@@ -145,7 +173,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         | ClimateEntityFeature.TURN_ON
     )
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_target_temperature_step = 1.0
+    _attr_target_temperature_step = 0.5
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
@@ -170,6 +198,20 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._last_retarget = 0.0
         self._follow_me_sent: float | None = None
         self._follow_me_step: str = "room"
+        self._fm_step_since = time()
+        self._fm_run_since: float | None = None
+        self._fm_offset: dict[str, int] = {"heat": 0, "cool": 0}
+        self._fm_min: dict[str, int] = {"heat": 0, "cool": 0}  # a stop failed one below
+        self._fm_start: dict[str, int] = {"heat": 0, "cool": 0}  # start pushed further
+        self._fm_park: dict[str, bool] = {"heat": False, "cool": False}
+        self._fm_parked = False
+        self._fm_boost = 0
+        self._fm_hold_worked = False
+        self._fm_mode: HVACMode | None = None
+        self._fm_mismatch: str | None = None
+        self._fm_mismatch_since = 0.0
+        self._fm_mismatch_room = 0.0
+        self._fm_short = 0.0
         self._neutral_value: float | None = None
         self._command_guard_until = 0.0
         self._manual_until = 0.0
@@ -221,8 +263,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 DEFAULT_OPENING_RESUME_DELAY_MINUTES,
             )
         ) * 60
-        self._heat_target = _whole(cfg.get(CONF_HEAT_TARGET, self._heat_target))
-        self._cool_target = _whole(cfg.get(CONF_COOL_TARGET, self._cool_target))
+        self._heat_target = _half(cfg.get(CONF_HEAT_TARGET, self._heat_target))
+        self._cool_target = _half(cfg.get(CONF_COOL_TARGET, self._cool_target))
         self._hysteresis = float(cfg.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
         self._start_hysteresis = float(cfg.get(CONF_START_HYSTERESIS, DEFAULT_START_HYSTERESIS))
         self._min_run = float(cfg.get(CONF_MIN_RUN_MINUTES, DEFAULT_MIN_RUN_MINUTES)) * 60
@@ -393,6 +435,16 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "effective_heat_target": self._eff_heat(),
             "follow_me_sent": self._follow_me_sent,
             "follow_me_step": self._follow_me_step,
+            "follow_me_offset_heat": self._fm_offset["heat"],
+            "follow_me_offset_cool": self._fm_offset["cool"],
+            "follow_me_offset_min_heat": self._fm_min["heat"],
+            "follow_me_offset_min_cool": self._fm_min["cool"],
+            "follow_me_start_offset_heat": self._fm_start["heat"],
+            "follow_me_start_offset_cool": self._fm_start["cool"],
+            "follow_me_boost": self._fm_boost,
+            "follow_me_park_heat": self._fm_park["heat"],
+            "follow_me_park_cool": self._fm_park["cool"],
+            "follow_me_parked": self._fm_parked,
             "effective_cool_target": self._eff_cool(),
             "price_offset": self._price_offset(self._active_mode == HVACMode.COOL),
             "active_mode": self._active_mode,
@@ -544,12 +596,24 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             except ValueError:
                 self._hvac_mode = HVACMode.OFF
             attrs = old.attributes
-            self._heat_target = _whole(
+            self._heat_target = _half(
                 attrs.get("heat_target_saved", attrs.get("target_temp_low", self._heat_target))
             )
-            self._cool_target = _whole(
+            self._cool_target = _half(
                 attrs.get("cool_target_saved", attrs.get("target_temp_high", self._cool_target))
             )
+            for mode in ("heat", "cool"):
+                for store, key in ((self._fm_offset, "follow_me_offset"), (self._fm_min, "follow_me_offset_min")):
+                    try:
+                        store[mode] = max(0, min(_FM_OFFSET_MAX, int(attrs.get(f"{key}_{mode}", 0))))
+                    except (TypeError, ValueError):
+                        store[mode] = 0
+                self._fm_min[mode] = min(self._fm_min[mode], self._fm_offset[mode])
+                try:
+                    self._fm_start[mode] = max(0, min(_FM_BOOST_MAX, int(attrs.get(f"follow_me_start_offset_{mode}", 0))))
+                except (TypeError, ValueError):
+                    self._fm_start[mode] = 0
+                self._fm_park[mode] = bool(attrs.get(f"follow_me_park_{mode}", False))
             try:
                 self._active_mode = HVACMode(attrs.get("active_mode", HVACMode.OFF))
             except ValueError:
@@ -895,6 +959,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
 
     def follow_me_value(self, room: float) -> float:
         """The temperature to send as Follow Me: steered while the unit regulates."""
+        now = time()
         step, value = "room", room
         mode = self._active_mode
         pump = self.hass.states.get(self._heat_pump) if self._heat_pump else None
@@ -902,38 +967,168 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self._unit_regulates()
             and mode in (HVACMode.HEAT, HVACMode.COOL)
             and self._opening_stage == OPENING_STAGE_NONE
+            and self._manual_until <= now  # a remote-control target is held on the true room
             and pump is not None
             and pump.state == mode.value
         ):
+            if mode != self._fm_mode:
+                # Heat and cool (heat_cool) each start from scratch.
+                self._fm_mode, self._follow_me_step = mode, "room"
             target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
-            try:
-                unit_target = float(pump.attributes.get("temperature"))
-            except (TypeError, ValueError):
-                unit_target = float(round(target))
+            unit_target = self._setpoint_target(mode, pump)
             sign = 1 if mode == HVACMode.HEAT else -1
             short = round((target - room) * sign, 2)  # > 0: the room still needs heat (cool)
-            last = self._follow_me_step
-            if short >= _FM_START or (last == "start" and short > 0):
-                step = "start"
-            elif short <= -_FM_STOP or last == "stop":
-                step = "stop"
-            else:
-                step = "hold"
+            self._fm_short = short
+            step = self._next_fm_step(short, now)
+            heat = mode == HVACMode.HEAT
             if step == "start":
-                # Never report the room closer to the target than it is: far below the
-                # target the unit must see the whole shortfall, or it idles along.
-                value = (
-                    min(float(math.floor(room)), unit_target - 1)
-                    if mode == HVACMode.HEAT
-                    else max(float(math.ceil(room)), unit_target + 1)
-                )
+                # Never closer to the target than the room is: far off, the unit must
+                # see the whole shortfall or it idles along.
+                base = min(math.floor(room), unit_target - 1) if heat else max(math.ceil(room), unit_target + 1)
+            elif step == "stop":
+                base = max(math.ceil(room), unit_target + 1) if heat else min(math.floor(room), unit_target - 1)
             else:
-                value = {"hold": unit_target, "stop": unit_target + sign}[step]
+                base = unit_target
+            if step != self._follow_me_step:
+                self._fm_boost = 0
+            shift = self._fm_offset[mode.value]
+            if step == "start":
+                shift -= self._fm_start[mode.value] + self._fm_boost
+            value = float(base + sign * shift)
+        if step != self._follow_me_step:
+            if step == "start" and self._follow_me_step in ("stop", "room"):
+                self._fm_run_since = now
+            elif step == "hold" and self._follow_me_step == "room":
+                self._fm_run_since = now
+            self._fm_step_since = now
+            self._fm_mismatch = None
+            self._fm_hold_worked = False
+            self._fm_boost = 0
         if (step, value) != (self._follow_me_step, self._follow_me_sent):
             self._follow_me_step, self._follow_me_sent = step, value
             if self.entity_id:
                 self.async_write_ha_state()
         return value
+
+    def _next_fm_step(self, short: float, now: float) -> str:
+        """start / hold / stop from how far the room is from the target (0.1 K)."""
+        last = self._follow_me_step
+        if last == "start":
+            return "start" if short > 0 else "hold"
+        if last == "stop":
+            rested = now - self._fm_step_since >= self._min_off
+            if short >= _FM_START and (rested or short >= _FM_FORCE):
+                return "start"
+            return "stop"
+        if short >= _FM_START:
+            return "start"
+        if short <= -_FM_STOP:
+            ran = self._fm_run_since is None or now - self._fm_run_since >= self._min_run
+            if ran or short <= -_FM_FORCE:
+                return "stop"
+        return "hold"
+
+    def _check_follow_me(self, now: float) -> None:
+        """Learn the unit's own Follow Me offset from whether it stops, holds and starts."""
+        mode = self._active_mode
+        step = self._follow_me_step
+        room = self.current_temperature
+        stats = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_stats")
+        if (
+            mode not in (HVACMode.HEAT, HVACMode.COOL)
+            or step not in ("start", "hold", "stop")
+            or room is None
+            or self.unit.online() is False
+            or not self.unit.work_known()
+            or (stats is not None and getattr(stats, "defrosting", False))
+        ):
+            self._fm_mismatch = None
+            return
+        key = mode.value
+        sign = 1 if mode == HVACMode.HEAT else -1
+        working = self.unit.working(key)
+        cond = None
+        if step == "stop":
+            if working and not self._fm_parked:
+                cond = "stop"
+        elif step == "hold":
+            if working:
+                self._fm_hold_worked = True
+            elif self._fm_hold_worked:
+                cond = "hold"
+        elif self._fm_short >= _FM_START_SHORT:
+            cond = "start"
+        if cond != self._fm_mismatch:
+            self._fm_mismatch, self._fm_mismatch_since, self._fm_mismatch_room = cond, now, room
+            return
+        if cond is None:
+            return
+        if cond == "start" and (room - self._fm_mismatch_room) * sign >= _FM_PROGRESS:
+            # The room comes up: the unit does its job.
+            self._fm_mismatch_since, self._fm_mismatch_room = now, room
+            return
+        if now - self._fm_mismatch_since < (_FM_START_CHECK if cond == "start" else _FM_STOP_CHECK):
+            return
+        self._fm_mismatch_since, self._fm_mismatch_room = now, room
+        offset = self._fm_offset[key]
+        what = "heating" if key == "heat" else "cooling"
+        if cond == "stop":
+            if offset < _FM_OFFSET_MAX:
+                self._fm_offset[key] = self._fm_min[key] = offset + 1
+                _LOGGER.warning(
+                    "%s: the unit kept %s %d min after Follow Me said stop – raising its Follow Me offset to %d",
+                    self.entry.title, what, _FM_STOP_CHECK // 60, offset + 1,
+                )
+            elif not self._fm_park[key]:
+                self._fm_park[key] = True
+                self._fm_min[key] = offset
+                _LOGGER.warning(
+                    "%s: the unit ignores Follow Me even %d° past its target – its target is parked during stops",
+                    self.entry.title, offset + 1,
+                )
+        elif cond == "hold":
+            # Told the room is at its target, the unit stopped: it is told too warm (cold).
+            self._fm_hold_worked = False
+            if offset > 0:
+                self._fm_offset[key] = offset - 1
+                self._fm_min[key] = min(self._fm_min[key], offset - 1)
+                self._fm_start[key] = max(0, self._fm_start[key] - 1)  # it may have made up for it
+                self._fm_park[key] = False
+                _LOGGER.warning(
+                    "%s: the unit stopped %s at its target – lowering its Follow Me offset to %d",
+                    self.entry.title, what, offset - 1,
+                )
+        elif offset > self._fm_min[key]:
+            self._fm_offset[key] = offset - 1
+            self._fm_park[key] = False
+            _LOGGER.warning(
+                "%s: the room did not come up in %d min – lowering its Follow Me offset to %d",
+                self.entry.title, _FM_START_CHECK // 60, offset - 1,
+            )
+        elif not working and self._fm_start[key] < _FM_BOOST_MAX:
+            # The offset is needed to stop the unit, yet with it the unit does not start:
+            # its own start/stop hysteresis is wider – start further from now on.
+            self._fm_start[key] += 1
+            _LOGGER.warning(
+                "%s: the unit did not start in %d min – Follow Me starts %d° further from now on",
+                self.entry.title, _FM_START_CHECK // 60, self._fm_start[key],
+            )
+        elif working and self._fm_boost < _FM_BOOST_MAX:
+            # It works but the room does not come up: push this start further.
+            self._fm_boost += 1
+            _LOGGER.info(
+                "%s: the room did not come up in %d min – this Follow Me start pushed %d° further",
+                self.entry.title, _FM_START_CHECK // 60, self._fm_boost,
+            )
+        self.async_write_ha_state()  # the feeder sends the new value
+
+    def stop_requested(self) -> bool:
+        """The unit has been told to stop heating/cooling (Follow Me stop, neutral idle or off)."""
+        if self._hvac_mode == HVACMode.OFF or self._opening_stage != OPENING_STAGE_NONE:
+            return True
+        if self._unit_regulates():
+            return self._follow_me_step == "stop"
+        return self._active_mode == HVACMode.OFF
 
     def _unit_regulates(self) -> bool:
         """The unit holds the room target itself, on the room temperature sent as Follow Me.
@@ -1088,9 +1283,22 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                     return
                 await self._disable_thermostats()
                 if desired in (HVACMode.HEAT, HVACMode.COOL) and self._unit_regulates():
-                    # Keep the unit's target on the room target (user, price and away
-                    # changes). A no-op when it already matches.
-                    if now > self._command_guard_until or reason in _TARGET_REASONS:
+                    room = self.current_temperature
+                    if room is not None:
+                        self.follow_me_value(room)  # advance start/hold/stop on time, too
+                    self._check_follow_me(now)
+                    park = self._follow_me_step == "stop" and self._fm_park[desired.value]
+                    if park and not self._fm_parked:
+                        # Even the largest offset does not stop this unit: hold it off by
+                        # its target until the next start.
+                        neutral = self._neutral_target(desired, pump)
+                        await self._set_pump_target(neutral, desired, step_towards_comfort=True)
+                        self._fm_parked = True
+                        self._last_command_reason = "follow_me_park"
+                    elif not park and (now > self._command_guard_until or reason in _TARGET_REASONS or self._fm_parked):
+                        # Keep the unit's target on the room target (user, price and away
+                        # changes). A no-op when it already matches.
+                        self._fm_parked = False
                         await self._prepare_setpoint(desired, reason=f"target_{desired.value}")
                     self.async_write_ha_state()
                     return
@@ -1177,7 +1385,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         lo = self._neutral_target(HVACMode.HEAT, pump)
         hi = self._neutral_target(HVACMode.COOL, pump)
         target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
-        return float(round(max(lo, min(hi, target))))
+        return _whole(max(lo, min(hi, target)))
 
     def _pump_matches_neutral(self) -> bool:
         pump = self.hass.states.get(self._heat_pump)
@@ -1323,7 +1531,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             min_temp = max(min_temp, self._min_heat_accepted)
         if self._max_cool_accepted is not None:
             max_temp = min(max_temp, self._max_cool_accepted)
-        desired = float(round(max(min_temp, min(max_temp, desired))))
+        desired = _whole(max(min_temp, min(max_temp, desired)))
         current = pump.attributes.get("temperature")
         try:
             if abs(float(current) - desired) < 1:
@@ -1433,14 +1641,14 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_temperature(self, **kwargs) -> None:
         if kwargs.get("target_temp_low") is not None:
-            self._heat_target = _whole(kwargs["target_temp_low"])
+            self._heat_target = _half(kwargs["target_temp_low"])
         if kwargs.get("target_temp_high") is not None:
-            self._cool_target = _whole(kwargs["target_temp_high"])
+            self._cool_target = _half(kwargs["target_temp_high"])
         if kwargs.get(ATTR_TEMPERATURE) is not None:
             if self._hvac_mode == HVACMode.COOL:
-                self._cool_target = _whole(kwargs[ATTR_TEMPERATURE])
+                self._cool_target = _half(kwargs[ATTR_TEMPERATURE])
             else:
-                self._heat_target = _whole(kwargs[ATTR_TEMPERATURE])
+                self._heat_target = _half(kwargs[ATTR_TEMPERATURE])
         if self._hvac_mode != HVACMode.OFF:
             self._reset_opening_episode()
         self.async_write_ha_state()

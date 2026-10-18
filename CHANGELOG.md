@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.0
+- **Fix: a unit could keep heating after the room passed the target.** Some units add their own compensation to Follow Me in heat mode – an S 5232 told "a degree above the target" kept running at ~630 W. The steered Follow Me now learns each unit's offset (per mode) from whether the compressor really stops and starts (compressor frequency, else the power meter):
+  - **stop** must stop the unit: still working after 6 min → the offset goes up a degree;
+  - **hold** must keep a running unit running: it stops at the target → the offset goes down;
+  - **start** must bring the room up: no 0.2 °C rise in 15 min while ≥ 0.5 °C short → the offset goes down when it may, else the start is pushed a degree further (for good if the unit did not even start, for this start only if it works too weakly);
+  - a unit that ignores even 4 degrees has its own target parked at the neutral value while stopped and restored for the next start;
+  - the stop step sends at least the room temperature (rounded up), so far above the target the unit is told the whole surplus.
+  - Nothing is learned without a compressor/power reading, while the unit defrosts or is offline. The learning is kept over restarts (`follow_me_offset_*`, `follow_me_offset_min_*`, `follow_me_start_offset_*`, `follow_me_park_*`).
+- **Half-degree targets.** The thermostat takes 21.5 °C etc. The decisions run on the 0.1 °C room sensor (start 0.2 below, stop 0.3 above); the unit's own target is the rounded value. The Qlima AC card shows the decimal.
+- Minimum run (20 min) and off (10 min) times now also apply to the Follow Me steps, unless the room is 0.5 °C past the target.
+- Defrost count: a compressor stop that Follow Me asked for is no longer counted as a defrost.
+- Tested with hours of simulated operation against a Midea-like unit (hidden compensation 0–7, wider own hysteresis, soft start, defrosts, noisy sensor, open door, price steps, heat_cool, a day beyond its capacity, a lost power sensor and a restart).
+
 ## 1.7.11
 - **Fix: the unit barely heated when the room was far below the target.** While the unit regulates on Follow Me, the start step sent "target − 1" however far off the room was – with the target at 30 °C and the room at 22.7 °C the unit was told the room was 29 °C, saw a one-degree shortfall and idled along. The start step now sends the true room temperature (rounded down; up when cooling) whenever that is further from the target, so the unit sees the whole shortfall and works hard. Within a degree of the target nothing changes.
 

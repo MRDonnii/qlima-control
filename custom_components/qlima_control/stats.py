@@ -13,7 +13,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import SIGNAL_UPDATE
+from .const import DOMAIN, SIGNAL_UPDATE
 from .unit import QlimaUnit
 
 _TICK = timedelta(seconds=30)
@@ -123,6 +123,12 @@ class QlimaStats:
         power, outdoor = self.unit.power(), self.unit.outdoor()
         if mode != "heat" or power is None or outdoor is None or outdoor > _DEFROST_MAX_OUTDOOR:
             self.defrosting = False
+            return
+        thermostat = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id)
+        if thermostat is not None and thermostat.stop_requested():
+            # The compressor stops because it was told to – that drop is no defrost.
+            self.defrosting = False
+            self._was_running_at_speed = 0.0
             return
         if power >= _DEFROST_RUN_W:
             self._was_running_at_speed = time()

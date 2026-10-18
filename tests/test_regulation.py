@@ -159,27 +159,33 @@ async def test_defrost_comes_from_the_unit_when_it_reports_it(hass, esp_device):
 
 
 async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
-    """Follow Me is whole degrees: target −1 until the room reaches the target, then the
-    target (modulate), target +1 from +0.3 K (off before +0.5) until 0.2 K below again."""
+    """Whole-degree Follow Me steered at 0.1 K: target −1 until the room reaches the
+    target, then the target (modulate), target +1 from +0.3 K (off before +0.5) until
+    0.2 K below again – with minimum run and off times against short cycling."""
     pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
     await _follow_me(hass, entity, clock)
     assert pump.target == 22
-    steps = [
-        (22.0, 22, "hold"),
-        (21.85, 22, "hold"),   # only 0.15 K short: no start yet
-        (21.8, 21, "start"),   # 0.2 K short: start
-        (21.95, 21, "start"),  # full effort until the target is reached
-        (22.0, 22, "hold"),    # reached: let it modulate
-        (21.9, 22, "hold"),    # dips a little: keeps modulating, no new full push
-        (22.25, 22, "hold"),
-        (22.3, 23, "stop"),    # +0.3 K: off before +0.5
-        (22.0, 23, "stop"),    # stays off while it cools down …
-        (21.85, 23, "stop"),
-        (21.8, 21, "start"),   # … until 0.2 K below again
-    ]
-    for room, sent, step in steps:
+
+    def check(room, sent, step):
         assert entity.follow_me_value(room) == sent, room
         assert entity.extra_state_attributes["follow_me_step"] == step, room
+
+    check(22.0, 22, "hold")
+    check(21.85, 22, "hold")    # only 0.15 K short: no start yet
+    check(21.8, 21, "start")    # 0.2 K short: start
+    check(21.95, 21, "start")   # full effort until the target is reached
+    check(22.0, 22, "hold")     # reached: let it modulate
+    check(21.9, 22, "hold")     # dips a little: keeps modulating, no new full push
+    check(22.3, 22, "hold")     # +0.3 K but it has run under 20 min: no short cycle …
+    check(22.5, 23, "stop")     # … unless it reaches +0.5 K
+    check(22.0, 23, "stop")     # stays off while it cools down …
+    check(21.8, 23, "stop")     # … 0.2 K below, but off under 10 min: no restart yet
+    clock.advance(11)
+    check(21.8, 21, "start")    # rested: start again
+    check(22.0, 22, "hold")
+    clock.advance(21)
+    check(22.3, 23, "stop")     # ran 20 min: off at +0.3 K
+    check(21.5, 21, "start")    # 0.5 K below: start at once despite the off time
     assert pump.target == 22  # the unit's own target never moves
     # Cooling mirrors it.
     await entity.async_set_hvac_mode("cool")
@@ -204,6 +210,14 @@ async def test_follow_me_shows_the_whole_shortfall_far_from_the_target(hass, clo
     assert entity.follow_me_value(27.6) == 27   # still the true shortfall
     assert entity.follow_me_value(29.4) == 29   # within a degree: target −1 as before
     assert entity.follow_me_value(30.0) == 30   # reached: hold
+    # Turned down well below the room: the unit hears the whole overshoot and stops.
+    await entity.async_set_temperature(temperature=22)
+    pump.target = 22
+    pump.publish()
+    await hass.async_block_till_done()
+    assert entity.follow_me_value(23.4) == 24
+    assert entity.extra_state_attributes["follow_me_step"] == "stop"
+    assert entity.follow_me_value(26.2) == 27   # far above: the true overshoot
 
 
 async def test_follow_me_is_the_room_when_the_thermostat_regulates(hass, clock):

@@ -168,8 +168,8 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             vol.Required(CONF_REGULATION, default=d.get(CONF_REGULATION, DEFAULT_REGULATION)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=[REGULATION_UNIT, REGULATION_THERMOSTAT], translation_key="regulation")
             ),
-            vol.Required(CONF_HEAT_TARGET, default=d.get(CONF_HEAT_TARGET, DEFAULT_HEAT_TARGET)): _number(16, 30, 1, "°C"),
-            vol.Required(CONF_COOL_TARGET, default=d.get(CONF_COOL_TARGET, DEFAULT_COOL_TARGET)): _number(18, 32, 1, "°C"),
+            vol.Required(CONF_HEAT_TARGET, default=d.get(CONF_HEAT_TARGET, DEFAULT_HEAT_TARGET)): _number(16, 30, 0.5, "°C"),
+            vol.Required(CONF_COOL_TARGET, default=d.get(CONF_COOL_TARGET, DEFAULT_COOL_TARGET)): _number(18, 32, 0.5, "°C"),
             vol.Required(CONF_START_HYSTERESIS, default=d.get(CONF_START_HYSTERESIS, DEFAULT_START_HYSTERESIS)): _number(0.0, 2.0, 0.1, "°C"),
             vol.Required(CONF_HYSTERESIS, default=d.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)): _number(0.2, 2.0, 0.1, "°C"),
             vol.Required(CONF_MIN_RUN_MINUTES, default=d.get(CONF_MIN_RUN_MINUTES, DEFAULT_MIN_RUN_MINUTES)): _number(5, 180, 1, "min"),

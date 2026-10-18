@@ -180,10 +180,12 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 *Indstillinger → Styring → Regulering*:
 
 - **Anlægget holder målet (Follow Me)** – standard. Anlægget får rumtemperaturen som Follow Me og selve rummålet (inkl. fravær og prisstyring) og modulerer selv kompressoren. Integrationen skruer kun ned ved åben dør/vindue (altid til minimum) og slukker, hvis den står åben længe. Termostaten viser *inaktiv*, når anlægget holder målet uden at køre. Er Follow Me slået fra, eller mangler rumtemperaturen, bruges termostaten nedenfor.
-  - Follow Me kan kun sende **hele grader**, og anlægget starter først en grad under sit mål og stopper en grad over – med den rigtige rumtemperatur ville rummet svinge ±0,5 °C. Derfor styrer integrationen den værdi, der sendes, mens anlæggets eget mål står fast:
-    - **Start** (målet − 1) når rummet er 0,2 °C under målet – fuld varme, indtil målet er nået.
-    - **Hold** (målet) fra målet og op til +0,3 °C – et kørende anlæg modulerer roligt, et slukket bliver slukket.
-    - **Stop** (målet + 1) ved +0,3 °C, så det slukker før +0,5 °C – indtil rummet igen er 0,2 °C under målet.
+  - Follow Me kan kun sende **hele grader**, og anlægget starter først en grad under sit mål og stopper en grad over – med den rigtige rumtemperatur ville rummet svinge ±0,5 °C. Derfor styrer integrationen den værdi, der sendes, ud fra rumføleren (0,1 °C), mens anlæggets eget mål står fast (målet afrundet – mål i **halve grader** som 21,5 °C kan vælges):
+    - **Start** når rummet er 0,2 °C under målet: anlægget får at vide, at rummet er mindst en grad under målet (rumtemperaturen, når den er længere væk) – fuld varme, indtil målet er nået.
+    - **Hold** fra målet og op til +0,3 °C – et kørende anlæg modulerer roligt, et slukket bliver slukket.
+    - **Stop** ved +0,3 °C: anlægget får at vide, at rummet er mindst en grad over målet, så kompressoren slukker – indtil rummet igen er 0,2 °C under målet.
+    - Min. kørsel (20 min) og pause (10 min) gælder også her, medmindre rummet er 0,5 °C forbi målet.
+    - **Anlæggets egen kompensation læres.** Nogle anlæg lægger selv noget til Follow Me (en S 5232 kørte videre ved "en grad over"). Integrationen ser på kompressoren (ellers effektmåleren): kører den stadig 6 min efter *stop*, flyttes alle værdier en grad (`follow_me_offset_heat/cool`); slukker den i *hold*, eller kommer rummet ikke op i *start*, flyttes de tilbage. Starter anlægget ikke, skubbes starten længere ud (`follow_me_start_offset_*`). Hjælper selv 4 grader ikke, parkeres anlæggets mål på minimum under stop. Der læres ikke uden effektmåler/kompressorfrekvens, under afrimning eller offline, og det huskes over genstart.
     - Køl er spejlvendt. Termostaten viser det som `follow_me_step` og `follow_me_sent`; *Rumtemperatur (modtaget)* på ESP'en viser den styrede værdi.
 - **Termostaten** – varmepumpen starter, når rummet er **under målet** (start-hysterese, standard 0,1 °C), og holder i tomgang når rummet er **målet + 0,5 °C** – anlæggets setpunkt sænkes til minimum i stedet for at slukke, så kompressoren skånes. Uden Follow Me kører Midea-anlæg ellers typisk videre til ca. 2 °C over målet, fordi de måler oppe under loftet.
 - Ændrer nogen noget på fjernbetjeningen, respekteres det som **manuel overstyring** (standard 120 min). **Frigiv** afslutter den med det samme.
@@ -191,7 +193,7 @@ Vælger du **vægtet**, får du et trin hvor hver føler får en procent. En fø
 
 ### Begrænsninger
 
-- Anlæggene tager kun **hele grader** (også Follow Me).
+- Anlæggene tager kun **hele grader** (også Follow Me) – halve grader i termostaten opnås ved at styre Follow Me ud fra rumføleren.
 - Swing/vip styres via IR, så Home Assistant kan ikke se om anlægget vipper.
 - Qlima S 5225/5232 svarer kun med Mideas korte status – ingen kompressorfrekvens, spoletemperaturer eller effekt fra anlægget selv (testet med tre rammeformater). Brug en effektmåler. Andre Midea-anlæg kan give servicedata via `qlima-control-servicedata.yaml`.
 

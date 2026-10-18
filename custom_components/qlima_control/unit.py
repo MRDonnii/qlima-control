@@ -256,6 +256,12 @@ class QlimaUnit:
             return None
         return state.state == "on"
 
+    def work_known(self) -> bool:
+        """Whether working() is measured (compressor or power), not assumed."""
+        if self.compressor_hz() is not None:
+            return True
+        return self.power_sensor is not None and self.power() is not None
+
     def working(self, mode: str) -> bool:
         """The unit heats/cools right now: compressor running, else power above the running level."""
         if self.pump_mode() != mode:
