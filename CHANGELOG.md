@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1
+- What the learning has learned (stop and start level, confirmations, weather) is shown also while the thermostat is off – for the mode it steered last (heat before it ever ran).
+
 ## 1.10.0
 - **The learning is rebuilt on what the units really do.** A Qlima S 5225 reports the Follow Me value it acts on and simply has its own limits: it stops only when told 2° above its target and starts at 1° below. So instead of one offset that shifted every value (which also made far-off starts too weak), each unit and mode now has a **stop level** and a **start level**:
   - start sends at least the start level below the unit's target (the room itself when further off), hold one degree short of the stop level, stop at least the stop level above;

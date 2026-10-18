@@ -257,6 +257,11 @@ class FollowMe:
             stop_at = max(MIN_STOP, STOP - max(0.0, stats.get("over", 0.0) - 0.3))
         return round(start_at, 2), round(stop_at, 2)
 
+    @property
+    def last_mode(self) -> str | None:
+        """The mode it steered last (heat/cool)."""
+        return self._mode
+
     def band(self) -> str | None:
         outdoor = self.unit.outdoor()
         return None if outdoor is None else str(int(math.floor(outdoor / BAND) * BAND))

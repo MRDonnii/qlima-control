@@ -965,3 +965,11 @@ def test_a_pause_forgets_a_half_seen_echo_problem():
     fm.hass, fm.entry = None, SimpleNamespace(entry_id="x")
     fm.idle()
     assert fm._bad_since is None and fm._pairs == {} and fm._check is None
+
+
+async def test_what_is_learned_shows_while_off(hass, esp_device, sim_clock):
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=1)
+    await plant.run(6 * 60)
+    await plant.entity.async_set_hvac_mode("off")
+    info = plant.entity.follow_me_learning()
+    assert info["state"] == "off" and info["mode"] == "heat" and info["stop_level"] == 2 and info["start_level"] == 1

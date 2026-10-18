@@ -957,12 +957,13 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         return self._fm.info(active=active, steering=self._steering() is not None, mode=mode)
 
     @property
-    def _fm_last_mode(self) -> str | None:
+    def _fm_last_mode(self) -> str:
+        """The mode whose learning to show while neither heat nor cool runs (also when off)."""
         if self._hvac_mode == HVACMode.COOL:
             return "cool"
         if self._hvac_mode in (HVACMode.HEAT, HVACMode.HEAT_COOL):
             return "heat"
-        return None
+        return self._fm.last_mode or "heat"
 
     def reset_follow_me_learning(self) -> None:
         """Forget what Follow Me learned (e.g. after a unit swap) and start over."""
