@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.0
+- **Learns the weather.** Per 5 °C outdoor band (and per heat/cool) it measures how far the room still rises once the start step ends – the heat already on its way – and how far it still falls after a start (soft start). A large rise moves the stop closer to the target (down to +0.15 °C) and hands over from start to hold before the target; a large fall starts earlier (down to −0.1 °C). Each band is learned on its own, so the band stays around the target on mild days and in frost, and it keeps adjusting as the season changes. Shown as `outdoor_band`, `start_at`, `stop_at`, `hold_at`, `overshoot`, `undershoot` on the *Follow Me learning* sensor; stored in `follow_me_weather` (kept over restarts, cleared by *Reset Follow Me learning*).
+- Simulation: a room where the heat reaches the sensor 25 min late narrowed from 21.4–22.5 °C to 21.65–22.15 °C; another held 21.95 °C without stopping.
+- AC card 0.10.2 shows the tuned start/stop for the current outdoor band.
+
 ## 1.8.2
 - **The learning explains itself in Home Assistant.** When a check lasts longer than a unit needs to react, a notification says what was seen, why it happens and what will change; the result replaces it ("lært … gemt"), and it disappears by itself when the unit did as told. Everyday starts and stops stay quiet (a check is only shown after 2–5 min, and the in-cycle start push is not shown as learning).
 - **Follow Me that does not reach the unit is detected.** The unit reports the Follow Me value it acts on as its indoor temperature; once it has echoed three values, a mismatch for 10 min means IR does not get through: the learning pauses (state *Follow Me not received*) and a notification says to check the IR LED. It clears by itself.

@@ -120,7 +120,7 @@ def sim_clock():
 class Plant:
     """Wires the simulated unit and room to Home Assistant and runs minute by minute."""
 
-    def __init__(self, hass, entity, unit: MideaSim, room: Room, clock: Clock, noise: float = 0.0):
+    def __init__(self, hass, entity, unit: MideaSim, room: Room, clock: Clock, noise: float = 0.0, lag: float = 0.0):
         self.hass, self.entity, self.unit, self.room, self.clock = hass, entity, unit, room, clock
         self.feeder = hass.data[DOMAIN][f"{entity.entry.entry_id}_feeder"]
         self.stats = hass.data[DOMAIN][f"{entity.entry.entry_id}_stats"]
@@ -128,6 +128,7 @@ class Plant:
         self.noise, self.random = noise, random.Random(7)
         self.power_ok = True
         self.ir_ok = True
+        self.lag, self.delivered = lag, 0.0  # minutes the heat takes to reach the room sensor
 
     def register(self) -> None:
         async def set_temperature(call):
@@ -157,7 +158,11 @@ class Plant:
         for _ in range(minutes):
             self.clock.advance(1)
             self.unit.step(self.room.temp)
-            self.room.step(self.unit.heat_w)
+            if self.lag:
+                self.delivered += (self.unit.heat_w - self.delivered) / self.lag
+            else:
+                self.delivered = self.unit.heat_w
+            self.room.step(self.delivered)
             for sensor in ROOMS:
                 # Real room sensors report tenths, some with a little noise.
                 reading = round(self.room.temp + self.random.uniform(-self.noise, self.noise), 1)
@@ -187,7 +192,7 @@ class Plant:
 
 async def _plant(hass, esp_device, clock, *, room: float, outdoor: float, comp: int = 0, target: float = 22.0,
                  mode: str = "heat", cool_target: float = 25.0, unit: dict | None = None, noise: float = 0.0,
-                 **extra) -> Plant:
+                 lag: float = 0.0, **extra) -> Plant:
     hass.states.async_set("sensor.qlima_test_ude", str(outdoor))
     for sensor in ROOMS:
         hass.states.async_set(sensor, f"{room:.1f}", {"unit_of_measurement": "°C", "device_class": "temperature"})
@@ -197,7 +202,7 @@ async def _plant(hass, esp_device, clock, *, room: float, outdoor: float, comp: 
     extra.setdefault("opening_sensors", [])
     entry = await _setup(hass, esp_device, heat_target=target, cool_target=cool_target, regulation="unit", **extra)
     entity = hass.data[DOMAIN][entry.entry_id]
-    plant = Plant(hass, entity, sim, Room(room, outdoor), clock, noise=noise)
+    plant = Plant(hass, entity, sim, Room(room, outdoor), clock, noise=noise, lag=lag)
     plant.register()
     plant.publish()
     await hass.async_block_till_done()  # seen inside the start-up grace, not as a remote change
@@ -628,4 +633,48 @@ async def test_a_unit_that_stops_at_its_target_does_not_short_cycle(hass, esp_de
     assert plant.entity._fm_offset["heat"] == 0
     assert plant.starts(6 * 60) <= 14
     low, high = plant.band(6 * 60)
+    assert low >= 21.4 and high <= 22.4, (low, high)
+
+
+def _peaks(plant, minutes: int) -> list[float]:
+    """The highest room temperature of each off period in the window."""
+    peaks, current = [], None
+    for _, temp, running, _, _ in plant.window(minutes):
+        if not running:
+            current = temp if current is None else max(current, temp)
+        elif current is not None:
+            peaks.append(current)
+            current = None
+    return peaks
+
+
+async def test_overshoot_is_learned_for_the_weather(hass, esp_device, sim_clock):
+    """A slow room (the heat reaches the sensor late): the band at this outdoor temperature narrows."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=3.0, lag=25)
+    plant.room.c = 2.0e6
+    await plant.run(5 * 60)
+    first_low, first_high = plant.band(4 * 60)
+    await plant.run(14 * 60)
+    entity = plant.entity
+    stats = entity._fm_weather["heat"]["0"]
+    assert stats["n_over"] >= 2 and stats["n_under"] >= 2, stats
+    start_at, stop_at, hold_at = entity._fm_thresholds("heat")
+    assert start_at < 0.2 and stop_at < 0.3, (start_at, stop_at, hold_at)
+    low, high = plant.band(6 * 60)
+    assert low > first_low + 0.15 and high < first_high - 0.15, ((first_low, first_high), (low, high))
+    assert low >= 21.55 and high <= 22.3, (low, high)
+    info = entity.follow_me_learning()
+    assert info["outdoor_band"] == "0..5" and info["stop_at"] == stop_at
+
+
+async def test_each_kind_of_weather_is_learned_on_its_own(hass, esp_device, sim_clock):
+    """From a mild day into frost: the frost band is learned separately and the target still holds."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=11.0, lag=10)
+    await plant.run(10 * 60)
+    plant.room.outdoor = -6.0
+    hass.states.async_set("sensor.qlima_test_ude", "-6")
+    await plant.run(12 * 60)
+    weather = plant.entity._fm_weather["heat"]
+    assert "10" in weather and "-10" in weather, weather
+    low, high = plant.band(5 * 60)
     assert low >= 21.4 and high <= 22.4, (low, high)
