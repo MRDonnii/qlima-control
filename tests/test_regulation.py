@@ -20,6 +20,11 @@ FOLLOW_ME = "switch.fake_follow_me"
 
 async def _follow_me(hass, entity, clock, on: bool = True) -> None:
     entity.unit.esp["follow_me"] = FOLLOW_ME
+    # The ESP's action that takes the room temperature (without it Follow Me is not steered).
+    feeder = hass.data[DOMAIN][f"{entity.entry.entry_id}_feeder"]
+    feeder.action = "qlima_test_set_room_temperature"
+    if not hass.services.has_service("esphome", feeder.action):
+        hass.services.async_register("esphome", feeder.action, lambda call: None)
     hass.states.async_set(FOLLOW_ME, "on" if on else "off")
     clock.advance(2)  # past the echo guard of the start commands
     await entity._evaluate("periodic")
@@ -194,7 +199,9 @@ async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
     assert entity.follow_me_value(25.2) == 26  # 0.2 K warm: start cooling
     assert entity.follow_me_value(25.05) == 26  # until the target is reached
     assert entity.follow_me_value(25.0) == 25
-    assert entity.follow_me_value(24.7) == 24  # 0.3 K cold: stop
+    assert entity.follow_me_value(24.7) == 25  # 0.3 K cold, but it started just now: hold …
+    clock.advance(21)
+    assert entity.follow_me_value(24.7) == 24  # … until it has run its minimum: stop
 
 
 async def test_follow_me_shows_the_whole_shortfall_far_from_the_target(hass, clock):

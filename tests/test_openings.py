@@ -101,7 +101,9 @@ class FakePump:
 @pytest.fixture
 def clock():
     c = Clock()
-    with patch.object(hpt_climate, "time", c), patch.object(hpt_climate, "_TARGET_CONFIRM_SECONDS", 1):
+    with patch.object(hpt_climate, "time", c), patch.object(hpt_climate, "_TARGET_CONFIRM_SECONDS", 1), patch(
+        "custom_components.qlima_control.followme.time", c
+    ):
         yield c
 
 

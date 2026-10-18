@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import logging
 import math
 from time import time
@@ -25,6 +25,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import learning_notice
+from .followme import FollowMe, Steering
 from .const import (
     AWAY_STATES,
     CONF_COOL_TARGET,
@@ -44,7 +45,6 @@ from .const import (
     CONF_SENSOR_STABLE_SECONDS,
     CONF_SENSOR_LOSS_GRACE_SECONDS,
     CONF_SETPOINT_COMPENSATION,
-    CONF_TEMPERATURE_SENSOR,
     CONF_THERMOSTATS_TO_DISABLE,
     COUNTDOWN_MANUAL_OVERRIDE,
     COUNTDOWN_MIN_RUN,
@@ -89,65 +89,9 @@ _TARGET_CONFIRM_SECONDS = 10
 _TARGET_CONFIRM_ATTEMPTS = 4
 # While heating/cooling, re-check the compensated unit target this often.
 _RETARGET_SECONDS = 300
-# Follow Me reaches the unit in whole degrees. While the unit regulates on it, the
-# value sent is steered from the room sensor (0.1 K) instead of passed through:
-#   start – room _FM_START below the target: the unit is told the room is at least a
-#           degree below its target (further when the room is further off), so it
-#           works – kept until the target is reached, no turning down before;
-#   hold  – at the target: the unit is told the room is exactly at its target and
-#           modulates (a stopped unit stays off);
-#   stop  – room _FM_STOP above the target: the unit is told the room is at least a
-#           degree above its target (further when it is), so the compressor stops –
-#           kept until the room is _FM_START below the target again.
-# Midea units do not all act on the Follow Me value as it is: some add their own
-# compensation in heat mode (an S 5232 told "a degree above" kept running at
-# ~630 W). So every value is shifted by a learned offset per unit and mode, learned
-# from whether the unit really works (compressor, else power) when it should:
-#   - in stop it must stop: still working after _FM_STOP_CHECK → offset +1 (and the
-#     offset is known to need at least that);
-#   - in hold a running unit must keep running: stopped for _FM_STOP_CHECK → the
-#     offset is too large → −1;
-#   - in start it must start: idle for _FM_IDLE_CHECK → the offset is too large (−1)
-#     if it may be lowered, else the start is pushed a degree further for good (the
-#     unit's own start/stop hysteresis is wider);
-#   - in start the room must come up: no _FM_PROGRESS within _FM_RISE_CHECK while
-#     _FM_START_SHORT short → the offset −1 if it may be lowered, else this start
-#     only is pushed a degree further (boost).
-# Each step counts as confirmed once the unit did it (stopped in stop, started in
-# start); follow_me_learning() reports the check running, its progress and history.
-# If even _FM_OFFSET_MAX does not stop it, the unit's target is parked at its
-# neutral value during stop (guaranteed off) and restored at the next start.
-# Minimum run and off times keep the compressor from short cycling unless the room
-# is _FM_FORCE past the target. The unit's own target is the room target rounded.
-_FM_START = 0.2
-_FM_STOP = 0.3
-_FM_FORCE = 0.5
-_FM_OFFSET_MAX = 4
-_FM_BOOST_MAX = 3
-_FM_STOP_CHECK = 6 * 60
-_FM_IDLE_CHECK = 10 * 60
-_FM_RISE_CHECK = 15 * 60
-_FM_HISTORY = 10
-# A check is only shown (and announced) once it lasts longer than a unit needs to react.
-_FM_SHOW = {"stop": 2 * 60, "hold": 2 * 60, "start": 4 * 60, "rise": 5 * 60}
-# The unit's own minimum run: a stop that comes sooner is not counted against it.
-_FM_UNIT_MIN_RUN = 7 * 60
-# The unit reports the Follow Me value it acts on as its indoor temperature. Once it has
-# echoed three different values, a mismatch for _FM_ECHO_LATE means IR does not get through.
-_FM_ECHO_GRACE = 3 * 60
-_FM_ECHO_LATE = 10 * 60
-# Weather learning: per 5 °C outdoor band, how far the room still rises once the start
-# step ends (overshoot – the heat already on its way) and still falls after a start
-# (undershoot – soft start). A large overshoot moves the start→hold switch before the
-# target and the stop closer to it; a large undershoot starts earlier – so the room stays
-# around the target in frost as on mild days. Measured until it turns (0.2 K) or 45 min.
-_FM_BAND = 5
-_FM_TRACK_MAX = 45 * 60
-_FM_TRACK_TURN = 0.2
-_FM_MIN_THRESHOLD = 0.1
-_FM_CHECKS = {"stop": _FM_STOP_CHECK, "hold": _FM_STOP_CHECK, "start": _FM_IDLE_CHECK, "rise": _FM_RISE_CHECK}
-_FM_START_SHORT = 0.5
-_FM_PROGRESS = 0.2
+# Follow Me steering and learning live in followme.py.
+_STEER_GAP_SECONDS = 180    # the unit briefly unavailable: keep steering
+_PARK_RETRY_SECONDS = 600   # the unit refused its parked target: try again after this
 # Midea UART (ESPHome) silently drops a command that arrives while the
 # previous one is still waiting for the unit's reply, so pump commands are
 # serialised with a gap between them.
@@ -198,6 +142,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
     )
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
+    # Kept for the cards and restore, but too large and too lively for the recorder.
+    _unrecorded_attributes = frozenset({
+        "follow_me_learning", "follow_me_levels", "follow_me_verified", "follow_me_weather", "follow_me_history",
+    })
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
@@ -220,35 +168,6 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._last_transition = time()
         self._last_command = 0.0
         self._last_retarget = 0.0
-        self._follow_me_sent: float | None = None
-        self._follow_me_step: str = "room"
-        self._fm_step_since = time()
-        self._fm_run_since: float | None = None
-        self._fm_offset: dict[str, int] = {"heat": 0, "cool": 0}
-        self._fm_min: dict[str, int] = {"heat": 0, "cool": 0}  # a stop failed one below
-        self._fm_start: dict[str, int] = {"heat": 0, "cool": 0}  # start pushed further
-        self._fm_park: dict[str, bool] = {"heat": False, "cool": False}
-        self._fm_parked = False
-        self._fm_boost = 0
-        self._fm_hold_worked = False
-        self._fm_hold_off_since: float | None = None
-        self._fm_left_check: tuple[str, float] | None = None  # the check open when the step changed
-        self._fm_mode: HVACMode | None = None
-        self._fm_verified: dict[str, dict[str, bool]] = {m: {"stop": False, "start": False} for m in ("heat", "cool")}
-        self._fm_history: list[dict[str, Any]] = []
-        self._fm_hold_strikes = {"heat": 0, "cool": 0}
-        self._fm_echo = False
-        self._fm_echo_values: set[int] = set()
-        self._fm_no_echo = False
-        self._fm_echo_bad_since: float | None = None
-        self._fm_sent_at = 0.0
-        self._fm_notice: str | None = None
-        self._fm_weather: dict[str, dict[str, dict[str, float]]] = {"heat": {}, "cool": {}}
-        self._fm_track: dict[str, Any] | None = None
-        self._fm_mismatch: str | None = None
-        self._fm_mismatch_since = 0.0
-        self._fm_mismatch_room = 0.0
-        self._fm_short = 0.0
         self._neutral_value: float | None = None
         self._command_guard_until = 0.0
         self._manual_until = 0.0
@@ -274,6 +193,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._startup_time = time()
         self._power_guard_until = 0.0
         self._started = False
+        self.unit = self.hass.data[DOMAIN][f"{self.entry.entry_id}_unit"]
+        self._fm = FollowMe(hass, entry, self.unit, self._write_if_added)
+        self._steer_cache: tuple[Steering, float] | None = None
+        self._park_retry_at = 0.0
         self._load_config()
 
     def _load_config(self) -> None:
@@ -306,6 +229,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._start_hysteresis = float(cfg.get(CONF_START_HYSTERESIS, DEFAULT_START_HYSTERESIS))
         self._min_run = float(cfg.get(CONF_MIN_RUN_MINUTES, DEFAULT_MIN_RUN_MINUTES)) * 60
         self._min_off = float(cfg.get(CONF_MIN_OFF_MINUTES, DEFAULT_MIN_OFF_MINUTES)) * 60
+        self._fm.min_run, self._fm.min_off = self._min_run, self._min_off
         self._stable_seconds = float(
             cfg.get(CONF_SENSOR_STABLE_SECONDS, DEFAULT_SENSOR_STABLE_SECONDS)
         )
@@ -470,23 +394,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "temperature_sensors": self._sensors,
             "away": self.is_away(),
             "effective_heat_target": self._eff_heat(),
-            "follow_me_sent": self._follow_me_sent,
-            "follow_me_step": self._follow_me_step,
-            "follow_me_offset_heat": self._fm_offset["heat"],
-            "follow_me_offset_cool": self._fm_offset["cool"],
-            "follow_me_offset_min_heat": self._fm_min["heat"],
-            "follow_me_offset_min_cool": self._fm_min["cool"],
-            "follow_me_start_offset_heat": self._fm_start["heat"],
-            "follow_me_start_offset_cool": self._fm_start["cool"],
-            "follow_me_boost": self._fm_boost,
-            "follow_me_verified": self._fm_verified,
+            **self._fm.attributes(),
             "follow_me_learning": self.follow_me_learning(),
-            "follow_me_history": self._fm_history,
-            "follow_me_echo": self._fm_echo,
-            "follow_me_weather": self._fm_weather,
-            "follow_me_park_heat": self._fm_park["heat"],
-            "follow_me_park_cool": self._fm_park["cool"],
-            "follow_me_parked": self._fm_parked,
             "effective_cool_target": self._eff_cool(),
             "price_offset": self._price_offset(self._active_mode == HVACMode.COOL),
             "active_mode": self._active_mode,
@@ -548,7 +457,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             return "opening_resume_wait"
         if self._sensor_unavailable_since is not None:
             return "sensor_lost"
-        if self._start_wait_minutes() > 0:
+        if self._start_wait_minutes() > 0 or (self._unit_regulates() and self._fm.countdowns()[1] is not None):
             return "start_wait"
         if reason == "waiting_to_reduce":
             return "opening_reduce_wait"
@@ -589,10 +498,14 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 out[COUNTDOWN_OPENING_RESUME] = future(
                     self._opening_closed_since + self._opening_resume_delay
                 )
-            if self._pending_mode is not None and self._active_mode == HVACMode.OFF:
-                out[COUNTDOWN_START_ALLOWED] = future(self._last_transition + self._min_off)
-            if self._active_mode in (HVACMode.HEAT, HVACMode.COOL):
-                out[COUNTDOWN_MIN_RUN] = future(self._last_transition + self._min_run)
+            if self._unit_regulates() and self._active_mode in (HVACMode.HEAT, HVACMode.COOL):
+                # The unit regulates: the compressor's own minimum run and off times apply.
+                out[COUNTDOWN_MIN_RUN], out[COUNTDOWN_START_ALLOWED] = self._fm.countdowns()
+            else:
+                if self._pending_mode is not None and self._active_mode == HVACMode.OFF:
+                    out[COUNTDOWN_START_ALLOWED] = future(self._last_transition + self._min_off)
+                if self._active_mode in (HVACMode.HEAT, HVACMode.COOL):
+                    out[COUNTDOWN_MIN_RUN] = future(self._last_transition + self._min_run)
             if self._sensor_unavailable_since is not None:
                 out[COUNTDOWN_SENSOR_LOSS] = future(
                     self._sensor_unavailable_since + self._sensor_loss_grace
@@ -623,9 +536,17 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
         await self._evaluate("release")
 
+    async def async_will_remove_from_hass(self) -> None:
+        self._fm.idle()
+        learning_notice.dismiss_no_echo(self.hass, self.entry.entry_id)  # a new instance checks afresh
+        await self._fm.async_flush()
+        await super().async_will_remove_from_hass()
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         old = await self.async_get_last_state()
+        if not await self._fm.async_load() and old is not None:
+            self._fm.migrate(dict(old.attributes))  # what an earlier version kept in the state
         if old is None:
             # First start: take over what the unit is doing now instead of
             # switching a running unit off.
@@ -644,33 +565,6 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self._cool_target = _half(
                 attrs.get("cool_target_saved", attrs.get("target_temp_high", self._cool_target))
             )
-            for mode in ("heat", "cool"):
-                for store, key in ((self._fm_offset, "follow_me_offset"), (self._fm_min, "follow_me_offset_min")):
-                    try:
-                        store[mode] = max(0, min(_FM_OFFSET_MAX, int(attrs.get(f"{key}_{mode}", 0))))
-                    except (TypeError, ValueError):
-                        store[mode] = 0
-                self._fm_min[mode] = min(self._fm_min[mode], self._fm_offset[mode])
-                try:
-                    self._fm_start[mode] = max(0, min(_FM_BOOST_MAX, int(attrs.get(f"follow_me_start_offset_{mode}", 0))))
-                except (TypeError, ValueError):
-                    self._fm_start[mode] = 0
-                self._fm_park[mode] = bool(attrs.get(f"follow_me_park_{mode}", False))
-                verified = (attrs.get("follow_me_verified") or {}).get(mode) or {}
-                self._fm_verified[mode] = {k: bool(verified.get(k, False)) for k in ("stop", "start")}
-            self._fm_echo = bool(attrs.get("follow_me_echo", False))
-            weather = attrs.get("follow_me_weather")
-            if isinstance(weather, dict):
-                for mode in ("heat", "cool"):
-                    bands = weather.get(mode)
-                    if isinstance(bands, dict):
-                        self._fm_weather[mode] = {
-                            str(band): {k: float(v) for k, v in stats.items() if isinstance(v, (int, float))}
-                            for band, stats in bands.items() if isinstance(stats, dict)
-                        }
-            history = attrs.get("follow_me_history")
-            if isinstance(history, list):
-                self._fm_history = [dict(h) for h in history if isinstance(h, dict)][-_FM_HISTORY:]
             try:
                 self._active_mode = HVACMode(attrs.get("active_mode", HVACMode.OFF))
             except ValueError:
@@ -792,6 +686,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
 
     @callback
     def _periodic_update(self, _now) -> None:
+        self._fm.track_compressor()
         self._update_opening()
         self.async_write_ha_state()
         self.hass.async_create_task(self._evaluate("periodic"))
@@ -893,6 +788,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
 
     async def async_price_changed(self) -> None:
         """The price level moved the effective target: regulate to the new one now."""
+        self._steer_cache = None  # never reuse a steering from before this change
         self._last_retarget = 0.0
         self.async_write_ha_state()
         await self._evaluate("price")
@@ -1014,435 +910,70 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         elif pump_state.state == HVACMode.OFF:
             await self._restore_thermostats()
 
-    def follow_me_value(self, room: float) -> float:
-        """The temperature to send as Follow Me: steered while the unit regulates."""
+    def _write_if_added(self) -> None:
+        if self.entity_id:
+            self.async_write_ha_state()
+
+    def _steering(self) -> Steering | None:
+        """What Follow Me is steered to now – None while it simply passes the room on.
+
+        The unit or its Follow Me switch briefly unavailable (an ESPHome reconnect) keeps the
+        last steering for _STEER_GAP_SECONDS, so the steps and their timers are not lost.
+        """
         now = time()
-        step, value = "room", room
         mode = self._active_mode
         pump = self.hass.states.get(self._heat_pump) if self._heat_pump else None
-        if (
-            self._unit_regulates()
-            and mode in (HVACMode.HEAT, HVACMode.COOL)
-            and self._opening_stage == OPENING_STAGE_NONE
-            and self._manual_until <= now  # a remote-control target is held on the true room
-            and pump is not None
-            and pump.state == mode.value
+        switch = self.unit.entity("follow_me")
+        switch_state = self.hass.states.get(switch) if switch else None
+        if pump is None or pump.state in (STATE_UNAVAILABLE, STATE_UNKNOWN) or (
+            switch_state is not None and switch_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
-            if mode != self._fm_mode:
-                # Heat and cool (heat_cool) each start from scratch.
-                self._fm_mode, self._follow_me_step = mode, "room"
-            target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
-            unit_target = self._setpoint_target(mode, pump)
-            sign = 1 if mode == HVACMode.HEAT else -1
-            short = round((target - room) * sign, 2)  # > 0: the room still needs heat (cool)
-            self._fm_short = short
-            step = self._next_fm_step(short, now, mode.value)
-            heat = mode == HVACMode.HEAT
-            if step == "start":
-                # Never closer to the target than the room is: far off, the unit must
-                # see the whole shortfall or it idles along.
-                base = min(math.floor(room), unit_target - 1) if heat else max(math.ceil(room), unit_target + 1)
-            elif step == "stop":
-                base = max(math.ceil(room), unit_target + 1) if heat else min(math.floor(room), unit_target - 1)
-            else:
-                base = unit_target
-            if step != self._follow_me_step:
-                self._fm_boost = 0
-            shift = self._fm_offset[mode.value]
-            if step == "start":
-                shift -= self._fm_start[mode.value] + self._fm_boost
-            value = float(base + sign * shift)
-        if step != self._follow_me_step:
-            if step == "start" and self._follow_me_step in ("stop", "room"):
-                self._fm_run_since = now
-            elif step == "hold" and self._follow_me_step == "room":
-                self._fm_run_since = now
-            self._fm_step_since = now
-            self._fm_left_check = (self._fm_mismatch, self._fm_mismatch_since) if self._fm_mismatch else None
-            kind = "under" if step == "start" else "over" if step == "hold" and self._follow_me_step == "start" else None
-            if kind and mode in (HVACMode.HEAT, HVACMode.COOL):
-                # How far the room still goes the old way after this step (weather learning).
-                signed = room * (1 if mode == HVACMode.HEAT else -1)
-                band = self._fm_band()
-                self._fm_track = None if band is None else {
-                    "kind": kind, "key": mode.value, "band": band, "since": now, "ref": signed, "extreme": signed,
-                }
-            elif step == "start" or (self._fm_track or {}).get("kind") == "under":
-                self._fm_track = None
-            self._fm_mismatch = None
-            self._fm_hold_worked = False
-            self._fm_hold_off_since = None
-            self._fm_boost = 0
-        if (step, value) != (self._follow_me_step, self._follow_me_sent):
-            if value != self._follow_me_sent:
-                self._fm_sent_at = now
-            self._follow_me_step, self._follow_me_sent = step, value
-            if self.entity_id:
-                self.async_write_ha_state()
-        return value
-
-    def _fm_band(self) -> str | None:
-        outdoor = self.unit.outdoor()
-        return None if outdoor is None else str(int(math.floor(outdoor / _FM_BAND) * _FM_BAND))
-
-    def _fm_thresholds(self, key: str) -> tuple[float, float, float]:
-        """(start, stop, hold) distances from the target, moved by what this weather band showed.
-
-        start: below the target where the start step begins; stop: above it where the stop
-        step begins; hold: below it where the start step already hands over to hold.
-        """
-        start, stop, hold = _FM_START, _FM_STOP, 0.0
-        band = self._fm_band()
-        stats = self._fm_weather.get(key, {}).get(band) if band is not None else None
-        if stats:
-            if stats.get("n_under", 0) >= 2:
-                start = max(_FM_MIN_THRESHOLD, _FM_START - max(0.0, stats.get("under", 0.0) - 0.1))
-            if stats.get("n_over", 0) >= 2:
-                over = stats.get("over", 0.0)
-                hold = min(max(0.0, over - 0.2), start - _FM_MIN_THRESHOLD)
-                stop = min(_FM_STOP, max(0.15, _FM_STOP - max(0.0, over - 0.3)))
-        return round(start, 2), round(stop, 2), round(hold, 2)
-
-    def _track_weather(self, now: float, key: str, room: float, working: bool) -> None:
-        """Follow the room after a stop/start until it turns, and learn the band's over/undershoot."""
-        track = self._fm_track
-        if track is None or track["key"] != key:
-            return
-        signed = room * (1 if key == "heat" else -1)
-        elapsed = now - track["since"]
-        if track["kind"] == "over":
-            track["extreme"] = max(track["extreme"], signed)
-            turned = track["extreme"] - signed >= _FM_TRACK_TURN
-            value = track["extreme"] - track["ref"]
-        else:
-            if not working and elapsed > 5 * 60:
-                self._fm_track = None  # the unit did not start: not a normal start
-                return
-            track["extreme"] = min(track["extreme"], signed)
-            turned = signed - track["extreme"] >= _FM_TRACK_TURN
-            value = track["ref"] - track["extreme"]
-        if not turned and elapsed < _FM_TRACK_MAX:
-            return
-        self._fm_track = None
-        stats = self._fm_weather[key].setdefault(track["band"], {})
-        field = track["kind"]
-        n = int(stats.get(f"n_{field}", 0))
-        value = max(0.0, min(1.5, round(value, 2)))
-        old = stats.get(field)
-        stats[field] = value if old is None else round(old + (value - old) * (0.5 if n < 3 else 0.3), 3)
-        stats[f"n_{field}"] = n + 1
-        self.async_write_ha_state()
-
-    def _next_fm_step(self, short: float, now: float, key: str = "heat") -> str:
-        """start / hold / stop from how far the room is from the target (0.1 K)."""
-        start_at, stop_at, hold_at = self._fm_thresholds(key)
-        last = self._follow_me_step
-        if last == "start":
-            return "start" if short > hold_at else "hold"
-        if last == "stop":
-            rested = now - self._fm_step_since >= self._min_off
-            if short >= start_at and (rested or short >= _FM_FORCE):
-                return "start"
-            return "stop"
-        if short >= start_at:
-            off = self._fm_hold_off_since if last == "hold" else None
-            if off is not None and now - off < self._min_off and short < _FM_FORCE:
-                return "hold"  # the unit stopped by itself in hold: the minimum off time applies too
-            return "start"
-        if short <= -stop_at:
-            ran = self._fm_run_since is None or now - self._fm_run_since >= self._min_run
-            if ran or short <= -_FM_FORCE:
-                return "stop"
-        return "hold"
-
-    def _fm_outcome(self, cond: str | None, key: str) -> tuple[str, int | None] | None:
-        """What a check that runs out changes: (what, new value), None when nothing can."""
-        offset = self._fm_offset[key]
-        if cond == "stop":
-            if offset < _FM_OFFSET_MAX:
-                return "offset_up", offset + 1
-            return None if self._fm_park[key] else ("park", None)
-        if cond == "hold":
-            # Below what a stop needed only on repeated evidence: stopping beats holding.
-            if offset > self._fm_min[key] or (offset > 0 and self._fm_hold_strikes[key] > 0):
-                return "offset_down", offset - 1
+            cached = self._steer_cache
+            return cached[0] if cached is not None and now - cached[1] < _STEER_GAP_SECONDS else None
+        feeder = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_feeder")
+        if (
+            not self._unit_regulates()
+            or mode not in (HVACMode.HEAT, HVACMode.COOL)
+            or self._opening_stage != OPENING_STAGE_NONE
+            or self._manual_until > now  # a remote-control target is held on the true room
+            or pump.state != mode.value
+            or (feeder is not None and not feeder.can_send())  # the value would not reach the unit
+        ):
+            self._steer_cache = None
             return None
-        if cond in ("start", "rise") and offset > self._fm_min[key]:
-            return "offset_down", offset - 1
-        if cond == "start" and self._fm_start[key] < _FM_BOOST_MAX:
-            return "start_earlier", self._fm_start[key] + 1
-        if cond == "rise" and self._fm_boost < _FM_BOOST_MAX:
-            return "boost", self._fm_boost + 1
-        return None
+        target = self._eff_heat() if mode == HVACMode.HEAT else self._eff_cool()
+        steering = Steering(mode.value, target, self._setpoint_target(mode, pump))
+        self._steer_cache = (steering, now)
+        return steering
 
-    def _fm_context(self, key: str, cond: str, value: int | None, left: int) -> dict[str, Any]:
-        heat = key == "heat"
-        target = self._eff_heat() if heat else self._eff_cool()
-        room = self.current_temperature
-        return {
-            "room": room, "target": target, "sent": self._follow_me_sent, "power": self.unit.power(),
-            "offset": self._fm_offset[key], "value": value, "left": left, "minutes": _FM_CHECKS[cond] // 60,
-            "short": None if room is None else abs(target - room),
-        }
-
-    def _fm_dismiss_check(self) -> None:
-        if self._fm_notice == "check":
-            learning_notice.dismiss_learning(self.hass, self.entry.entry_id)
-            self._fm_notice = None
-
-    def _check_follow_me(self, now: float) -> None:
-        """Learn the unit's own Follow Me offset from whether it stops, holds and starts."""
-        mode = self._active_mode
-        step = self._follow_me_step
-        room = self.current_temperature
-        if (
-            mode not in (HVACMode.HEAT, HVACMode.COOL)
-            or step not in ("start", "hold", "stop")
-            or room is None
-            or self._fm_pause_reason() is not None
-        ):
-            self._fm_mismatch = None
-            self._fm_dismiss_check()
-            return
-        key = mode.value
-        sign = 1 if mode == HVACMode.HEAT else -1
-        working = self.unit.working(key)
-        verified = self._fm_verified[key]
-        if step == "stop" and not working and not verified["stop"]:
-            verified["stop"] = True
-            self.async_write_ha_state()
-        elif step == "start" and working and not verified["start"]:
-            verified["start"] = True
-            self.async_write_ha_state()
-        cond = None
-        if step == "stop":
-            ran = self._fm_run_since is None or now - self._fm_run_since >= _FM_UNIT_MIN_RUN
-            if working and not self._fm_parked and ran:
-                cond = "stop"
-        elif step == "hold":
-            if working:
-                self._fm_hold_worked = True
-                self._fm_hold_off_since = None
-            elif self._fm_hold_worked:
-                cond = "hold"
-                if self._fm_hold_off_since is None:
-                    self._fm_hold_off_since = now
-        elif not working:
-            cond = "start" if self._fm_short >= self._fm_thresholds(key)[0] else None
-        elif self._fm_short >= _FM_START_SHORT:
-            cond = "rise"
-        left, self._fm_left_check = self._fm_left_check, None
-        if left and left[0] == "hold" and step == "start" and not working and now - left[1] >= _FM_SHOW["hold"]:
-            # It stayed off in hold until the room needed heat again: the hold check is complete.
-            self._fm_expire("hold", key, now, room)
-        if cond != self._fm_mismatch:
-            self._fm_mismatch, self._fm_mismatch_since, self._fm_mismatch_room = cond, now, room
-            self._fm_dismiss_check()  # the unit did what it was told: nothing to learn
-            self.async_write_ha_state()
-            return
-        if cond is None:
-            return
-        if cond == "rise" and (room - self._fm_mismatch_room) * sign >= _FM_PROGRESS:
-            # The room comes up: the unit does its job.
-            self._fm_mismatch_since, self._fm_mismatch_room = now, room
-            self._fm_dismiss_check()
-            return
-        elapsed = now - self._fm_mismatch_since
-        outcome = self._fm_outcome(cond, key)
-        if elapsed < _FM_CHECKS[cond]:
-            if outcome is not None and outcome[0] != "boost" and elapsed >= _FM_SHOW[cond] and self._fm_notice != "check":
-                left = max(1, math.ceil((_FM_CHECKS[cond] - elapsed) / 60))
-                if learning_notice.notify_check(
-                    self.hass, self.entry.entry_id, self.entry.title, cond, outcome[0],
-                    self._fm_context(key, cond, outcome[1], left),
-                ):
-                    self._fm_notice = "check"
-            return
-        self._fm_expire(cond, key, now, room)
-
-    def _fm_expire(self, cond: str, key: str, now: float, room: float) -> None:
-        """A check ran out with the unit still not doing what it was told: learn from it."""
-        verified = self._fm_verified[key]
-        outcome = self._fm_outcome(cond, key)
-        self._fm_mismatch_since, self._fm_mismatch_room = now, room
-        if cond == "hold":
-            self._fm_hold_worked = False  # once per stop in hold
-            if outcome is None and self._fm_offset[key] > 0:
-                # The first stop in hold at the offset a stop needed: note it, lower next time.
-                self._fm_hold_strikes[key] += 1
-        if outcome is None:
-            self._fm_dismiss_check()
-            return
-        what, value = outcome
-        if what == "offset_up":
-            self._fm_offset[key] = self._fm_min[key] = value
-            self._fm_hold_strikes[key] = 0
-            verified["stop"] = verified["start"] = False
-        elif what == "park":
-            self._fm_park[key] = True
-            self._fm_min[key] = self._fm_offset[key]
-            verified["stop"] = False
-        elif what == "offset_down":
-            self._fm_offset[key] = value
-            self._fm_park[key] = False
-            if cond == "hold":
-                self._fm_min[key] = min(self._fm_min[key], value)
-                self._fm_start[key] = max(0, self._fm_start[key] - 1)  # it may have made up for it
-                self._fm_hold_strikes[key] = 0
-            verified["stop"] = verified["start"] = False
-        elif what == "start_earlier":
-            self._fm_start[key] = value
-            verified["start"] = False
-        elif what == "boost":
-            self._fm_boost = value
-        self._fm_learned(key, cond, what, value)
-        if what != "boost":
-            learning_notice.notify_result(
-                self.hass, self.entry.entry_id, self.entry.title, cond, what, self._fm_context(key, cond, value, 0)
-            )
-            self._fm_notice = "result"
-        self.async_write_ha_state()  # the feeder sends the new value
-
-    def _fm_learned(self, key: str, cond: str, what: str, value: int | None) -> None:
-        if what != "boost":
-            self._fm_history = [*self._fm_history, {
-                "at": datetime.fromtimestamp(time(), timezone.utc).isoformat(timespec="seconds"),
-                "mode": key, "check": cond, "change": what, "value": value,
-            }][-_FM_HISTORY:]
-        log = _LOGGER.info if what == "boost" else _LOGGER.warning
-        log(
-            "%s: Follow Me %s – %s %s (%s)", self.entry.title, key,
-            {"stop": "the unit kept working after stop", "hold": "the unit stopped at its target",
-             "start": "the unit did not start", "rise": "the room did not come up"}[cond],
-            what, "" if value is None else value,
-        )
-
-    def _check_echo(self, now: float) -> None:
-        """The unit reports the Follow Me value it acts on; a lasting mismatch means IR does not get through."""
-        sent, reported = self._follow_me_sent, self.unit.unit_temperature()
-        if (
-            self._follow_me_step not in ("start", "hold", "stop")
-            or sent is None
-            or reported is None
-            or self.unit.online() is False
-        ):
-            self._fm_echo_bad_since = None
-            return
-        expected = math.floor(sent + 0.5)  # the ESP rounds like lroundf
-        if abs(reported - expected) < 0.5:
-            self._fm_echo_bad_since = None
-            if not self._fm_echo:
-                self._fm_echo_values.add(int(expected))
-                if len(self._fm_echo_values) >= 3:
-                    self._fm_echo = True
-                    self.async_write_ha_state()
-            if self._fm_no_echo:
-                self._fm_no_echo = False
-                learning_notice.dismiss_no_echo(self.hass, self.entry.entry_id)
-                _LOGGER.info("%s: the unit follows Follow Me again", self.entry.title)
-                self.async_write_ha_state()
-            return
-        if now - self._fm_sent_at < _FM_ECHO_GRACE:
-            return
-        if self._fm_echo_bad_since is None:
-            self._fm_echo_bad_since = now
-        if self._fm_echo and not self._fm_no_echo and now - self._fm_echo_bad_since >= _FM_ECHO_LATE:
-            self._fm_no_echo = True
-            minutes = int((now - self._fm_echo_bad_since) / 60) + _FM_ECHO_GRACE // 60
-            _LOGGER.warning(
-                "%s: the unit reports %.0f °C but was sent Follow Me %.0f °C – IR does not get through",
-                self.entry.title, reported, sent,
-            )
-            learning_notice.notify_no_echo(self.hass, self.entry.entry_id, self.entry.title, reported, sent, minutes)
-            self.async_write_ha_state()
-
-    def _fm_pause_reason(self) -> str | None:
-        """Why learning waits right now (None: it may learn)."""
-        if self.unit.online() is False:
-            return "offline"
-        if not self.unit.work_known():
-            return "no_meter"
-        if self._fm_no_echo:
-            return "no_follow_me"
-        fault = self.unit.fault_code()
-        if fault:
-            return "fault"
-        stats = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_stats")
-        if stats is not None and getattr(stats, "defrosting", False):
-            return "defrost"
-        return None
+    def follow_me_value(self, room: float) -> float:
+        """The temperature to send as Follow Me: steered while the unit regulates."""
+        return self._fm.value(room, self._steering())
 
     def follow_me_learning(self) -> dict[str, Any]:
-        """What the Follow Me learning does right now, how far a check is and what it learned."""
-        mode = self._active_mode if self._active_mode in (HVACMode.HEAT, HVACMode.COOL) else self._fm_mode
-        key = mode.value if mode in (HVACMode.HEAT, HVACMode.COOL) else None
-        info: dict[str, Any] = {"state": "off", "mode": key}
-        if key is not None:
-            info.update(
-                offset=self._fm_offset[key], start_offset=self._fm_start[key], park=self._fm_park[key],
-                stop_ok=self._fm_verified[key]["stop"], start_ok=self._fm_verified[key]["start"],
-                **self._fm_weather_info(key),
-            )
-        if self._regulation != REGULATION_UNIT or self._hvac_mode == HVACMode.OFF or key is None:
-            return info
-        reason = self._fm_pause_reason()
-        if reason in ("no_meter", "no_follow_me"):
-            info["state"] = reason
-            return info
-        if reason is not None or not self._unit_regulates() or self._follow_me_step == "room":
-            info.update(state="paused", reason=reason or "steering_off")
-            return info
-        cond = self._fm_mismatch
-        outcome = self._fm_outcome(cond, key) if cond else None
-        elapsed = max(0.0, time() - self._fm_mismatch_since) if cond else 0.0
-        if outcome is not None and outcome[0] != "boost" and elapsed >= _FM_SHOW[cond]:
-            needed = _FM_CHECKS[cond]
-            info.update(
-                state=f"checking_{cond}", check=cond, outcome=outcome[0], outcome_value=outcome[1],
-                elapsed_min=round(elapsed / 60, 1), needed_min=needed // 60,
-                remaining_min=max(0, math.ceil((needed - elapsed) / 60)),
-                progress=min(99, int(elapsed * 100 / needed)),
-            )
-            return info
-        info["state"] = "learned" if info["stop_ok"] and info["start_ok"] else "learning"
-        return info
+        """What the Follow Me learning does now, how far it is and what it has learned."""
+        mode = self._active_mode.value if self._active_mode in (HVACMode.HEAT, HVACMode.COOL) else self._fm_last_mode
+        active = self._regulation == REGULATION_UNIT and self._hvac_mode != HVACMode.OFF
+        return self._fm.info(active=active, steering=self._steering() is not None, mode=mode)
 
-    def _fm_weather_info(self, key: str) -> dict[str, Any]:
-        band = self._fm_band()
-        start_at, stop_at, hold_at = self._fm_thresholds(key)
-        stats = self._fm_weather.get(key, {}).get(band, {}) if band is not None else {}
-        return {
-            "outdoor_band": None if band is None else f"{band}..{int(band) + _FM_BAND}",
-            "start_at": start_at, "stop_at": stop_at, "hold_at": hold_at,
-            "overshoot": stats.get("over"), "undershoot": stats.get("under"),
-            "bands_learned": len(self._fm_weather.get(key, {})),
-        }
+    @property
+    def _fm_last_mode(self) -> str | None:
+        if self._hvac_mode == HVACMode.COOL:
+            return "cool"
+        if self._hvac_mode in (HVACMode.HEAT, HVACMode.HEAT_COOL):
+            return "heat"
+        return None
 
     def reset_follow_me_learning(self) -> None:
-        """Forget what was learned (e.g. after a unit swap) and start over."""
-        for key in ("heat", "cool"):
-            self._fm_offset[key] = self._fm_min[key] = self._fm_start[key] = 0
-            self._fm_park[key] = False
-            self._fm_hold_strikes[key] = 0
-            self._fm_verified[key] = {"stop": False, "start": False}
-        self._fm_boost = 0
-        self._fm_history = []
-        self._fm_mismatch = None
-        self._fm_weather = {"heat": {}, "cool": {}}
-        self._fm_track = None
-        self._fm_echo, self._fm_echo_values, self._fm_no_echo = False, set(), False
-        learning_notice.dismiss_learning(self.hass, self.entry.entry_id)
-        learning_notice.dismiss_no_echo(self.hass, self.entry.entry_id)
-        self._fm_notice = None
-        _LOGGER.warning("%s: Follow Me learning reset", self.entry.title)
-        self.async_write_ha_state()
+        """Forget what Follow Me learned (e.g. after a unit swap) and start over."""
+        self._fm.reset()
 
     def stop_requested(self) -> bool:
         """The unit has been told to stop heating/cooling (Follow Me stop, neutral idle or off)."""
         if self._hvac_mode == HVACMode.OFF or self._opening_stage != OPENING_STAGE_NONE:
             return True
         if self._unit_regulates():
-            return self._follow_me_step == "stop"
+            return self._fm.step == "stop"
         return self._active_mode == HVACMode.OFF
 
     def _unit_regulates(self) -> bool:
@@ -1599,26 +1130,24 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 await self._disable_thermostats()
                 if desired in (HVACMode.HEAT, HVACMode.COOL) and self._unit_regulates():
                     room = self.current_temperature
+                    steering = self._steering()
                     if room is not None:
-                        self.follow_me_value(room)  # advance start/hold/stop on time, too
-                    self._check_echo(now)
-                    self._check_follow_me(now)
-                    if room is not None and self._fm_pause_reason() is None:
-                        self._track_weather(now, desired.value, room, self.unit.working(desired.value))
-                    else:
-                        self._fm_track = None
-                    park = self._follow_me_step == "stop" and self._fm_park[desired.value]
-                    if park and not self._fm_parked:
-                        # Even the largest offset does not stop this unit: hold it off by
+                        self._fm.value(room, steering)  # advance start/hold/stop on time, too
+                    self._fm.evaluate(room, steering)
+                    park = self._fm.step == "stop" and self._fm.levels[desired.value]["park"]
+                    pump_here = pump is not None and pump.state == desired.value
+                    if park and pump_here and not self._fm.parked and now >= self._park_retry_at:
+                        # Even the highest stop level does not stop this unit: hold it off by
                         # its target until the next start.
                         neutral = self._neutral_target(desired, pump)
-                        await self._set_pump_target(neutral, desired, step_towards_comfort=True)
-                        self._fm_parked = True
+                        accepted = await self._set_pump_target(neutral, desired, step_towards_comfort=True)
+                        self._fm.parked = accepted is not None
+                        self._park_retry_at = 0.0 if accepted is not None else now + _PARK_RETRY_SECONDS
                         self._last_command_reason = "follow_me_park"
-                    elif not park and (now > self._command_guard_until or reason in _TARGET_REASONS or self._fm_parked):
+                    elif not park and pump_here and (now > self._command_guard_until or reason in _TARGET_REASONS or self._fm.parked):
                         # Keep the unit's target on the room target (user, price and away
                         # changes). A no-op when it already matches.
-                        self._fm_parked = False
+                        self._fm.parked = False
                         await self._prepare_setpoint(desired, reason=f"target_{desired.value}")
                     self.async_write_ha_state()
                     return
@@ -1948,12 +1477,12 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
 
     async def async_set_hvac_mode(self, hvac_mode) -> None:
         previous = self._hvac_mode
+        self._steer_cache = None  # never reuse a steering from before this change
         self._hvac_mode = HVACMode(hvac_mode)
         if self._hvac_mode == HVACMode.OFF:
             self._manual_until = 0
             self._user_start = False
-            self._fm_mismatch = None
-            self._fm_dismiss_check()
+            self._fm.idle()
         else:
             self._reset_opening_episode()
             if previous == HVACMode.OFF:
@@ -1962,6 +1491,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         await self._evaluate("thermostat_mode")
 
     async def async_set_temperature(self, **kwargs) -> None:
+        self._steer_cache = None  # never reuse a steering from before this change
         if kwargs.get("target_temp_low") is not None:
             self._heat_target = _half(kwargs["target_temp_low"])
         if kwargs.get("target_temp_high") is not None:

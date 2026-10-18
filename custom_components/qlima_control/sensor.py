@@ -187,7 +187,7 @@ class LearningSensor(_ThermostatSensor):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
         "off", "no_meter", "no_follow_me", "paused", "learning", "learned",
-        "checking_stop", "checking_hold", "checking_start", "checking_rise",
+        "checking_stop", "checking_hold", "checking_start",
     ]
     _attr_icon = "mdi:school-outline"
 
@@ -206,7 +206,7 @@ class LearningSensor(_ThermostatSensor):
             return None
         info = dict(thermostat.follow_me_learning())
         info.pop("state", None)
-        return {**info, "history": thermostat._fm_history}
+        return {**info, "history": thermostat._fm.history}
 
 
 class NextChangeSensor(_ThermostatSensor):

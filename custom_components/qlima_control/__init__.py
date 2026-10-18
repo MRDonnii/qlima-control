@@ -80,3 +80,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for key in (entry.entry_id, f"{entry.entry_id}_unit", f"{entry.entry_id}_notifier", f"{entry.entry_id}_feeder", f"{entry.entry_id}_power", f"{entry.entry_id}_stats", f"{entry.entry_id}_price", f"{entry.entry_id}_wake", f"{entry.entry_id}_turbo"):
             hass.data.get(DOMAIN, {}).pop(key, None)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """The entry is deleted: its stored statistics and Follow Me learning go with it."""
+    from homeassistant.helpers.storage import Store
+
+    for key in (f"qlima_control.stats.{entry.entry_id}", f"qlima_control.followme.{entry.entry_id}"):
+        await Store(hass, 1, key).async_remove()

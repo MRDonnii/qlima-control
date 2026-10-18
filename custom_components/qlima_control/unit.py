@@ -260,6 +260,16 @@ class QlimaUnit:
         """The unit's fault code (0: none), when the firmware reports it."""
         return self._float(self.entity("error_code"))
 
+    def compressor_on(self) -> bool | None:
+        """Whether the compressor runs (any mode); None when nothing tells."""
+        hz = self.compressor_hz()
+        if hz is not None:
+            return hz > 0
+        if self.power_sensor is None:
+            return None
+        power = self.power()
+        return None if power is None else power > self.running_power_w
+
     def work_known(self) -> bool:
         """Whether working() is measured (compressor or power), not assumed."""
         if self.compressor_hz() is not None:

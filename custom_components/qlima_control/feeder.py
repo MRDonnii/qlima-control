@@ -69,6 +69,10 @@ class RoomFeeder:
         while self._unsubs:
             self._unsubs.pop()()
 
+    def can_send(self) -> bool:
+        """The ESP has the action that takes the room temperature (older firmware reads it itself)."""
+        return bool(self.action) and self.hass.services.has_service("esphome", self.action)
+
     def _value(self) -> float | None:
         room = self.unit.room_temperature().value
         if room is None:
@@ -89,7 +93,7 @@ class RoomFeeder:
             self._send(value)
 
     def _send(self, value: float) -> None:
-        if not self.hass.services.has_service("esphome", self.action):
+        if not self.can_send():
             return  # firmware without the action (older) – it reads the sensor itself
         self.hass.async_create_task(self._push(value))
 
