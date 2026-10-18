@@ -24,7 +24,7 @@ from .esp import ESP_STATUSES, esp_info, esp_status
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Add the status, next-change and one countdown sensor per timer."""
-    entities: list[SensorEntity] = [StatusSensor(hass, entry), NextChangeSensor(hass, entry)]
+    entities: list[SensorEntity] = [StatusSensor(hass, entry), NextChangeSensor(hass, entry), LearningSensor(hass, entry)]
     entities += [CountdownSensor(hass, entry, key) for key in COUNTDOWNS]
     unit = hass.data[DOMAIN][f"{entry.entry_id}_unit"]
     for key, fn, kind, needs in _MEASUREMENTS:
@@ -179,6 +179,34 @@ class StatusSensor(_ThermostatSensor):
     def native_value(self) -> str | None:
         thermostat = self._thermostat
         return thermostat.status() if thermostat is not None else None
+
+
+class LearningSensor(_ThermostatSensor):
+    """The Follow Me learning: which check runs, how far it is, what was learned."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "off", "no_meter", "paused", "learning", "learned",
+        "checking_stop", "checking_hold", "checking_start", "checking_rise",
+    ]
+    _attr_icon = "mdi:school-outline"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "follow_me_learning")
+
+    @property
+    def native_value(self) -> str | None:
+        thermostat = self._thermostat
+        return thermostat.follow_me_learning()["state"] if thermostat is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        thermostat = self._thermostat
+        if thermostat is None:
+            return None
+        info = dict(thermostat.follow_me_learning())
+        info.pop("state", None)
+        return {**info, "history": thermostat._fm_history}
 
 
 class NextChangeSensor(_ThermostatSensor):

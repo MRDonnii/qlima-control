@@ -463,3 +463,27 @@ async def test_a_remote_control_target_is_held_then_released(hass, esp_device, s
     await plant.run(5 * 60)
     low, high = plant.band(2 * 60)
     assert low >= 21.6 and high <= 22.6, (low, high)
+
+
+async def test_the_learning_is_reported(hass, esp_device, sim_clock):
+    """The learning sensor tells which check runs, how far it is, what it learned – and when it is done."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=1)
+    entity = plant.entity
+    seen = {}
+    for _ in range(8 * 60):
+        await plant.run(1)
+        info = entity.follow_me_learning()
+        if info["state"] == "checking_stop" and info["elapsed_min"] >= 3:
+            seen.setdefault("stop", info)
+    stop = seen["stop"]
+    assert stop["outcome"] == "offset_up" and stop["outcome_value"] == 1
+    assert stop["needed_min"] == 6 and 40 <= stop["progress"] <= 70 and stop["remaining_min"] <= 3
+    sensor = next(s for s in hass.states.async_all("sensor") if s.entity_id.endswith("follow_me_learning"))
+    assert sensor.state == "learned"
+    assert sensor.attributes["offset"] == 1 and sensor.attributes["stop_ok"] and sensor.attributes["start_ok"]
+    history = sensor.attributes["history"]
+    assert [(h["check"], h["change"], h["value"]) for h in history] == [("stop", "offset_up", 1)]
+    # Kept over a restart with the rest of the learning.
+    assert hass.states.get(entity.entity_id).attributes["follow_me_history"] == history
+    await entity.async_set_hvac_mode("off")
+    assert entity.follow_me_learning()["state"] == "off"

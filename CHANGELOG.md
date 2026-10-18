@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1
+- **The Follow Me learning is shown.** New sensor *Follow Me learning* (and the thermostat attribute `follow_me_learning`):
+  - which check is running (stop, hold, start, heat-up), minutes elapsed/needed and progress in %, and what changes if it runs out;
+  - which steps are confirmed for the mode (`stop_ok`, `start_ok`): *Learned* once the unit stopped and started with the learned values;
+  - the last ten things it learned (`follow_me_history`), kept over restarts.
+- A unit that does not start is noticed sooner: idle for 10 min in the start step (0.2 °C short) – it no longer waits until the room is 0.5 °C short. A unit that runs but does not bring the room up is still checked over 15 min at 0.5 °C.
+- AC card: an *Indlærer · n min* pill and a *Follow Me-indlæring* row with progress. Room tiles: a learning badge.
+
 ## 1.8.0
 - **Fix: a unit could keep heating after the room passed the target.** Some units add their own compensation to Follow Me in heat mode – an S 5232 told "a degree above the target" kept running at ~630 W. The steered Follow Me now learns each unit's offset (per mode) from whether the compressor really stops and starts (compressor frequency, else the power meter):
   - **stop** must stop the unit: still working after 6 min → the offset goes up a degree;

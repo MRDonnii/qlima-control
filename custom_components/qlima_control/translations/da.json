@@ -489,6 +489,20 @@
       },
       "esp_esphome_version": {
         "name": "ESP32 ESPHome-version"
+      },
+      "follow_me_learning": {
+        "name": "Follow Me-indlæring",
+        "state": {
+          "off": "Slået fra",
+          "no_meter": "Mangler effektmåler",
+          "paused": "På pause",
+          "learning": "Indlærer",
+          "learned": "Indlært",
+          "checking_stop": "Tjekker stop",
+          "checking_hold": "Tjekker hold",
+          "checking_start": "Tjekker start",
+          "checking_rise": "Tjekker opvarmning"
+        }
       }
     },
     "climate": {

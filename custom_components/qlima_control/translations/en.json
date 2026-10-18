@@ -489,6 +489,20 @@
       },
       "esp_esphome_version": {
         "name": "ESP32 ESPHome version"
+      },
+      "follow_me_learning": {
+        "name": "Follow Me learning",
+        "state": {
+          "off": "Off",
+          "no_meter": "No power meter",
+          "paused": "Paused",
+          "learning": "Learning",
+          "learned": "Learned",
+          "checking_stop": "Checking the stop",
+          "checking_hold": "Checking the hold",
+          "checking_start": "Checking the start",
+          "checking_rise": "Checking the heat-up"
+        }
       }
     },
     "climate": {
