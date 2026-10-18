@@ -24,6 +24,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
 
+from . import learning_notice
 from .const import (
     AWAY_STATES,
     CONF_COOL_TARGET,
@@ -127,6 +128,14 @@ _FM_STOP_CHECK = 6 * 60
 _FM_IDLE_CHECK = 10 * 60
 _FM_RISE_CHECK = 15 * 60
 _FM_HISTORY = 10
+# A check is only shown (and announced) once it lasts longer than a unit needs to react.
+_FM_SHOW = {"stop": 2 * 60, "hold": 2 * 60, "start": 4 * 60, "rise": 5 * 60}
+# The unit's own minimum run: a stop that comes sooner is not counted against it.
+_FM_UNIT_MIN_RUN = 7 * 60
+# The unit reports the Follow Me value it acts on as its indoor temperature. Once it has
+# echoed three different values, a mismatch for _FM_ECHO_LATE means IR does not get through.
+_FM_ECHO_GRACE = 3 * 60
+_FM_ECHO_LATE = 10 * 60
 _FM_CHECKS = {"stop": _FM_STOP_CHECK, "hold": _FM_STOP_CHECK, "start": _FM_IDLE_CHECK, "rise": _FM_RISE_CHECK}
 _FM_START_SHORT = 0.5
 _FM_PROGRESS = 0.2
@@ -213,9 +222,18 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._fm_parked = False
         self._fm_boost = 0
         self._fm_hold_worked = False
+        self._fm_hold_off_since: float | None = None
+        self._fm_left_check: tuple[str, float] | None = None  # the check open when the step changed
         self._fm_mode: HVACMode | None = None
         self._fm_verified: dict[str, dict[str, bool]] = {m: {"stop": False, "start": False} for m in ("heat", "cool")}
         self._fm_history: list[dict[str, Any]] = []
+        self._fm_hold_strikes = {"heat": 0, "cool": 0}
+        self._fm_echo = False
+        self._fm_echo_values: set[int] = set()
+        self._fm_no_echo = False
+        self._fm_echo_bad_since: float | None = None
+        self._fm_sent_at = 0.0
+        self._fm_notice: str | None = None
         self._fm_mismatch: str | None = None
         self._fm_mismatch_since = 0.0
         self._fm_mismatch_room = 0.0
@@ -453,6 +471,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "follow_me_verified": self._fm_verified,
             "follow_me_learning": self.follow_me_learning(),
             "follow_me_history": self._fm_history,
+            "follow_me_echo": self._fm_echo,
             "follow_me_park_heat": self._fm_park["heat"],
             "follow_me_park_cool": self._fm_park["cool"],
             "follow_me_parked": self._fm_parked,
@@ -627,6 +646,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 self._fm_park[mode] = bool(attrs.get(f"follow_me_park_{mode}", False))
                 verified = (attrs.get("follow_me_verified") or {}).get(mode) or {}
                 self._fm_verified[mode] = {k: bool(verified.get(k, False)) for k in ("stop", "start")}
+            self._fm_echo = bool(attrs.get("follow_me_echo", False))
             history = attrs.get("follow_me_history")
             if isinstance(history, list):
                 self._fm_history = [dict(h) for h in history if isinstance(h, dict)][-_FM_HISTORY:]
@@ -1017,10 +1037,14 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             elif step == "hold" and self._follow_me_step == "room":
                 self._fm_run_since = now
             self._fm_step_since = now
+            self._fm_left_check = (self._fm_mismatch, self._fm_mismatch_since) if self._fm_mismatch else None
             self._fm_mismatch = None
             self._fm_hold_worked = False
+            self._fm_hold_off_since = None
             self._fm_boost = 0
         if (step, value) != (self._follow_me_step, self._follow_me_sent):
+            if value != self._follow_me_sent:
+                self._fm_sent_at = now
             self._follow_me_step, self._follow_me_sent = step, value
             if self.entity_id:
                 self.async_write_ha_state()
@@ -1037,6 +1061,9 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 return "start"
             return "stop"
         if short >= _FM_START:
+            off = self._fm_hold_off_since if last == "hold" else None
+            if off is not None and now - off < self._min_off and short < _FM_FORCE:
+                return "hold"  # the unit stopped by itself in hold: the minimum off time applies too
             return "start"
         if short <= -_FM_STOP:
             ran = self._fm_run_since is None or now - self._fm_run_since >= self._min_run
@@ -1052,7 +1079,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 return "offset_up", offset + 1
             return None if self._fm_park[key] else ("park", None)
         if cond == "hold":
-            return ("offset_down", offset - 1) if offset > 0 else None
+            # Below what a stop needed only on repeated evidence: stopping beats holding.
+            if offset > self._fm_min[key] or (offset > 0 and self._fm_hold_strikes[key] > 0):
+                return "offset_down", offset - 1
+            return None
         if cond in ("start", "rise") and offset > self._fm_min[key]:
             return "offset_down", offset - 1
         if cond == "start" and self._fm_start[key] < _FM_BOOST_MAX:
@@ -1060,6 +1090,21 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         if cond == "rise" and self._fm_boost < _FM_BOOST_MAX:
             return "boost", self._fm_boost + 1
         return None
+
+    def _fm_context(self, key: str, cond: str, value: int | None, left: int) -> dict[str, Any]:
+        heat = key == "heat"
+        target = self._eff_heat() if heat else self._eff_cool()
+        room = self.current_temperature
+        return {
+            "room": room, "target": target, "sent": self._follow_me_sent, "power": self.unit.power(),
+            "offset": self._fm_offset[key], "value": value, "left": left, "minutes": _FM_CHECKS[cond] // 60,
+            "short": None if room is None else abs(target - room),
+        }
+
+    def _fm_dismiss_check(self) -> None:
+        if self._fm_notice == "check":
+            learning_notice.dismiss_learning(self.hass, self.entry.entry_id)
+            self._fm_notice = None
 
     def _check_follow_me(self, now: float) -> None:
         """Learn the unit's own Follow Me offset from whether it stops, holds and starts."""
@@ -1070,9 +1115,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             mode not in (HVACMode.HEAT, HVACMode.COOL)
             or step not in ("start", "hold", "stop")
             or room is None
-            or self._fm_paused()
+            or self._fm_pause_reason() is not None
         ):
             self._fm_mismatch = None
+            self._fm_dismiss_check()
             return
         key = mode.value
         sign = 1 if mode == HVACMode.HEAT else -1
@@ -1086,19 +1132,28 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self.async_write_ha_state()
         cond = None
         if step == "stop":
-            if working and not self._fm_parked:
+            ran = self._fm_run_since is None or now - self._fm_run_since >= _FM_UNIT_MIN_RUN
+            if working and not self._fm_parked and ran:
                 cond = "stop"
         elif step == "hold":
             if working:
                 self._fm_hold_worked = True
+                self._fm_hold_off_since = None
             elif self._fm_hold_worked:
                 cond = "hold"
+                if self._fm_hold_off_since is None:
+                    self._fm_hold_off_since = now
         elif not working:
             cond = "start" if self._fm_short >= _FM_START else None
         elif self._fm_short >= _FM_START_SHORT:
             cond = "rise"
+        left, self._fm_left_check = self._fm_left_check, None
+        if left and left[0] == "hold" and step == "start" and not working and now - left[1] >= _FM_SHOW["hold"]:
+            # It stayed off in hold until the room needed heat again: the hold check is complete.
+            self._fm_expire("hold", key, now, room)
         if cond != self._fm_mismatch:
             self._fm_mismatch, self._fm_mismatch_since, self._fm_mismatch_room = cond, now, room
+            self._fm_dismiss_check()  # the unit did what it was told: nothing to learn
             self.async_write_ha_state()
             return
         if cond is None:
@@ -1106,18 +1161,38 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         if cond == "rise" and (room - self._fm_mismatch_room) * sign >= _FM_PROGRESS:
             # The room comes up: the unit does its job.
             self._fm_mismatch_since, self._fm_mismatch_room = now, room
+            self._fm_dismiss_check()
             return
-        if now - self._fm_mismatch_since < _FM_CHECKS[cond]:
-            return
-        self._fm_mismatch_since, self._fm_mismatch_room = now, room
+        elapsed = now - self._fm_mismatch_since
         outcome = self._fm_outcome(cond, key)
+        if elapsed < _FM_CHECKS[cond]:
+            if outcome is not None and outcome[0] != "boost" and elapsed >= _FM_SHOW[cond] and self._fm_notice != "check":
+                left = max(1, math.ceil((_FM_CHECKS[cond] - elapsed) / 60))
+                if learning_notice.notify_check(
+                    self.hass, self.entry.entry_id, self.entry.title, cond, outcome[0],
+                    self._fm_context(key, cond, outcome[1], left),
+                ):
+                    self._fm_notice = "check"
+            return
+        self._fm_expire(cond, key, now, room)
+
+    def _fm_expire(self, cond: str, key: str, now: float, room: float) -> None:
+        """A check ran out with the unit still not doing what it was told: learn from it."""
+        verified = self._fm_verified[key]
+        outcome = self._fm_outcome(cond, key)
+        self._fm_mismatch_since, self._fm_mismatch_room = now, room
         if cond == "hold":
             self._fm_hold_worked = False  # once per stop in hold
+            if outcome is None and self._fm_offset[key] > 0:
+                # The first stop in hold at the offset a stop needed: note it, lower next time.
+                self._fm_hold_strikes[key] += 1
         if outcome is None:
+            self._fm_dismiss_check()
             return
         what, value = outcome
         if what == "offset_up":
             self._fm_offset[key] = self._fm_min[key] = value
+            self._fm_hold_strikes[key] = 0
             verified["stop"] = verified["start"] = False
         elif what == "park":
             self._fm_park[key] = True
@@ -1129,6 +1204,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             if cond == "hold":
                 self._fm_min[key] = min(self._fm_min[key], value)
                 self._fm_start[key] = max(0, self._fm_start[key] - 1)  # it may have made up for it
+                self._fm_hold_strikes[key] = 0
             verified["stop"] = verified["start"] = False
         elif what == "start_earlier":
             self._fm_start[key] = value
@@ -1136,6 +1212,11 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         elif what == "boost":
             self._fm_boost = value
         self._fm_learned(key, cond, what, value)
+        if what != "boost":
+            learning_notice.notify_result(
+                self.hass, self.entry.entry_id, self.entry.title, cond, what, self._fm_context(key, cond, value, 0)
+            )
+            self._fm_notice = "result"
         self.async_write_ha_state()  # the feeder sends the new value
 
     def _fm_learned(self, key: str, cond: str, what: str, value: int | None) -> None:
@@ -1152,14 +1233,60 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             what, "" if value is None else value,
         )
 
-    def _fm_paused(self) -> bool:
-        """Learning waits: no compressor/power reading, the unit offline or defrosting."""
+    def _check_echo(self, now: float) -> None:
+        """The unit reports the Follow Me value it acts on; a lasting mismatch means IR does not get through."""
+        sent, reported = self._follow_me_sent, self.unit.unit_temperature()
+        if (
+            self._follow_me_step not in ("start", "hold", "stop")
+            or sent is None
+            or reported is None
+            or self.unit.online() is False
+        ):
+            self._fm_echo_bad_since = None
+            return
+        expected = math.floor(sent + 0.5)  # the ESP rounds like lroundf
+        if abs(reported - expected) < 0.5:
+            self._fm_echo_bad_since = None
+            if not self._fm_echo:
+                self._fm_echo_values.add(int(expected))
+                if len(self._fm_echo_values) >= 3:
+                    self._fm_echo = True
+                    self.async_write_ha_state()
+            if self._fm_no_echo:
+                self._fm_no_echo = False
+                learning_notice.dismiss_no_echo(self.hass, self.entry.entry_id)
+                _LOGGER.info("%s: the unit follows Follow Me again", self.entry.title)
+                self.async_write_ha_state()
+            return
+        if now - self._fm_sent_at < _FM_ECHO_GRACE:
+            return
+        if self._fm_echo_bad_since is None:
+            self._fm_echo_bad_since = now
+        if self._fm_echo and not self._fm_no_echo and now - self._fm_echo_bad_since >= _FM_ECHO_LATE:
+            self._fm_no_echo = True
+            minutes = int((now - self._fm_echo_bad_since) / 60) + _FM_ECHO_GRACE // 60
+            _LOGGER.warning(
+                "%s: the unit reports %.0f °C but was sent Follow Me %.0f °C – IR does not get through",
+                self.entry.title, reported, sent,
+            )
+            learning_notice.notify_no_echo(self.hass, self.entry.entry_id, self.entry.title, reported, sent, minutes)
+            self.async_write_ha_state()
+
+    def _fm_pause_reason(self) -> str | None:
+        """Why learning waits right now (None: it may learn)."""
+        if self.unit.online() is False:
+            return "offline"
+        if not self.unit.work_known():
+            return "no_meter"
+        if self._fm_no_echo:
+            return "no_follow_me"
+        fault = self.unit.fault_code()
+        if fault:
+            return "fault"
         stats = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_stats")
-        return (
-            self.unit.online() is False
-            or not self.unit.work_known()
-            or (stats is not None and getattr(stats, "defrosting", False))
-        )
+        if stats is not None and getattr(stats, "defrosting", False):
+            return "defrost"
+        return None
 
     def follow_me_learning(self) -> dict[str, Any]:
         """What the Follow Me learning does right now, how far a check is and what it learned."""
@@ -1173,16 +1300,17 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             )
         if self._regulation != REGULATION_UNIT or self._hvac_mode == HVACMode.OFF or key is None:
             return info
-        if not self.unit.work_known():
-            info["state"] = "no_meter"
+        reason = self._fm_pause_reason()
+        if reason in ("no_meter", "no_follow_me"):
+            info["state"] = reason
             return info
-        if not self._unit_regulates() or self._follow_me_step == "room" or self._fm_paused():
-            info["state"] = "paused"
+        if reason is not None or not self._unit_regulates() or self._follow_me_step == "room":
+            info.update(state="paused", reason=reason or "steering_off")
             return info
         cond = self._fm_mismatch
         outcome = self._fm_outcome(cond, key) if cond else None
-        if outcome is not None:
-            elapsed = max(0.0, time() - self._fm_mismatch_since)
+        elapsed = max(0.0, time() - self._fm_mismatch_since) if cond else 0.0
+        if outcome is not None and outcome[0] != "boost" and elapsed >= _FM_SHOW[cond]:
             needed = _FM_CHECKS[cond]
             info.update(
                 state=f"checking_{cond}", check=cond, outcome=outcome[0], outcome_value=outcome[1],
@@ -1193,6 +1321,23 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             return info
         info["state"] = "learned" if info["stop_ok"] and info["start_ok"] else "learning"
         return info
+
+    def reset_follow_me_learning(self) -> None:
+        """Forget what was learned (e.g. after a unit swap) and start over."""
+        for key in ("heat", "cool"):
+            self._fm_offset[key] = self._fm_min[key] = self._fm_start[key] = 0
+            self._fm_park[key] = False
+            self._fm_hold_strikes[key] = 0
+            self._fm_verified[key] = {"stop": False, "start": False}
+        self._fm_boost = 0
+        self._fm_history = []
+        self._fm_mismatch = None
+        self._fm_echo, self._fm_echo_values, self._fm_no_echo = False, set(), False
+        learning_notice.dismiss_learning(self.hass, self.entry.entry_id)
+        learning_notice.dismiss_no_echo(self.hass, self.entry.entry_id)
+        self._fm_notice = None
+        _LOGGER.warning("%s: Follow Me learning reset", self.entry.title)
+        self.async_write_ha_state()
 
     def stop_requested(self) -> bool:
         """The unit has been told to stop heating/cooling (Follow Me stop, neutral idle or off)."""
@@ -1358,6 +1503,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                     room = self.current_temperature
                     if room is not None:
                         self.follow_me_value(room)  # advance start/hold/stop on time, too
+                    self._check_echo(now)
                     self._check_follow_me(now)
                     park = self._follow_me_step == "stop" and self._fm_park[desired.value]
                     if park and not self._fm_parked:
@@ -1704,6 +1850,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         if self._hvac_mode == HVACMode.OFF:
             self._manual_until = 0
             self._user_start = False
+            self._fm_mismatch = None
+            self._fm_dismiss_check()
         else:
             self._reset_opening_episode()
             if previous == HVACMode.OFF:

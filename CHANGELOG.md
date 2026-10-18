@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.2
+- **The learning explains itself in Home Assistant.** When a check lasts longer than a unit needs to react, a notification says what was seen, why it happens and what will change; the result replaces it ("lært … gemt"), and it disappears by itself when the unit did as told. Everyday starts and stops stay quiet (a check is only shown after 2–5 min, and the in-cycle start push is not shown as learning).
+- **Follow Me that does not reach the unit is detected.** The unit reports the Follow Me value it acts on as its indoor temperature; once it has echoed three values, a mismatch for 10 min means IR does not get through: the learning pauses (state *Follow Me not received*) and a notification says to check the IR LED. It clears by itself.
+- Learning also pauses while the unit shows a fault code.
+- A stop within the unit's own minimum run (7 min after a start) is not counted as a failed stop.
+- A unit that stops by itself in the hold step now rests the minimum off time before the next start (it short-cycled every ~20 min), and that stop completes the hold check.
+- Lowering the offset below what a stop needed takes two such stops in hold – no flip-flopping on a single odd stop.
+- New button *Reset Follow Me learning* (e.g. after a unit swap).
+
 ## 1.8.1
 - **The Follow Me learning is shown.** New sensor *Follow Me learning* (and the thermostat attribute `follow_me_learning`):
   - which check is running (stop, hold, start, heat-up), minutes elapsed/needed and progress in %, and what changes if it runs out;

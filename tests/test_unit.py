@@ -25,6 +25,7 @@ ESP = {
     "beep": ("switch", "Bip", "switch.qlima_test_bip"),
     "outdoor": ("sensor", "Udetemperatur", "sensor.qlima_test_ude"),
     "unit_temp": ("sensor", "Indetemperatur anlæg", "sensor.qlima_test_inde"),
+    "error_code": ("sensor", "Fejlkode", "sensor.qlima_test_fejlkode"),
     "filter_hours": ("sensor", "Driftstimer siden filterrens", "sensor.qlima_test_filter"),
     "online": ("binary_sensor", "Anlæg svarer", "binary_sensor.qlima_test_svarer"),
     "supply_temp": ("sensor", "Udblæsningstemperatur", "sensor.qlima_test_supply"),
@@ -57,6 +58,7 @@ def esp_device(hass):
     hass.states.async_set("switch.qlima_test_bip", "off")
     hass.states.async_set("sensor.qlima_test_ude", "7")
     hass.states.async_set("sensor.qlima_test_inde", "26")
+    hass.states.async_set("sensor.qlima_test_fejlkode", "0")
     hass.states.async_set("sensor.qlima_test_filter", "120")
     hass.states.async_set("binary_sensor.qlima_test_svarer", "on")
     hass.states.async_set("sensor.room_a", "21.0", {"unit_of_measurement": "°C", "device_class": "temperature"})

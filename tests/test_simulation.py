@@ -39,6 +39,7 @@ class MideaSim:
     stop_at: float = 1.0       # stops when it perceives the room this far past its target
     start_at: float = 1.0      # starts when it perceives the room this far short
     defrost_every: int = 0     # minutes of heating between defrosts (0: never)
+    own_min_run: int = 0       # minutes it keeps running after a start whatever it is told
     fm: float | None = None
     running: bool = False
     freq: float = 0.0          # 0..1 compressor
@@ -68,7 +69,7 @@ class MideaSim:
             self.off_minutes += 1
             if demand >= self.start_at and self.off_minutes >= 3:
                 self.running, self.freq, self.run_minutes = True, 0.1, 0
-        elif demand <= -self.stop_at:
+        elif demand <= -self.stop_at and self.run_minutes >= self.own_min_run:
             self.running, self.freq, self.off_minutes = False, 0.0, 0
         if self.running:
             want = max(0.15, min(1.0, 0.35 + 0.2 * demand))
@@ -76,6 +77,12 @@ class MideaSim:
             self.run_minutes += 1
             if self.mode == "heat" and self.defrost_every and self.run_minutes >= self.defrost_every:
                 self.defrost_left, self.run_minutes = 8, 0
+
+    def reported(self, room: float) -> float:
+        """Its indoor temperature as it reports it: the Follow Me value it acts on, when on."""
+        if self.mode in ("heat", "cool") and self.fm is not None:
+            return self.fm
+        return round(room + 2.0)
 
     @property
     def power(self) -> float:
@@ -120,6 +127,7 @@ class Plant:
         self.trace: list[tuple[float, float, bool, float, str]] = []
         self.noise, self.random = noise, random.Random(7)
         self.power_ok = True
+        self.ir_ok = True
 
     def register(self) -> None:
         async def set_temperature(call):
@@ -131,7 +139,8 @@ class Plant:
             self.publish(call.context)
 
         async def set_room(call):
-            self.unit.fm = float(round(call.data["temperature"]))
+            if self.ir_ok:
+                self.unit.fm = float(round(call.data["temperature"]))
 
         self.hass.services.async_register("climate", "set_temperature", set_temperature)
         self.hass.services.async_register("climate", "set_hvac_mode", set_hvac_mode)
@@ -154,6 +163,7 @@ class Plant:
                 reading = round(self.room.temp + self.random.uniform(-self.noise, self.noise), 1)
                 self.hass.states.async_set(sensor, f"{reading:.1f}", {"unit_of_measurement": "°C", "device_class": "temperature"})
             power = f"{self.unit.power:.0f}" if self.power_ok else "unavailable"
+            self.hass.states.async_set("sensor.qlima_test_inde", f"{self.unit.reported(self.room.temp):.1f}")
             self.hass.states.async_set(POWER, power, {"unit_of_measurement": "W"})
             self.publish()
             await self.hass.async_block_till_done()
@@ -487,3 +497,135 @@ async def test_the_learning_is_reported(hass, esp_device, sim_clock):
     assert hass.states.get(entity.entity_id).attributes["follow_me_history"] == history
     await entity.async_set_hvac_mode("off")
     assert entity.follow_me_learning()["state"] == "off"
+
+
+class Notices:
+    """Records the persistent notifications the integration creates and dismisses."""
+
+    def __init__(self, monkeypatch):
+        from custom_components.qlima_control import learning_notice
+
+        self.shown: dict[str, tuple[str, str]] = {}
+        self.log: list[tuple[str, str, str]] = []
+
+        def create(hass, message, title=None, notification_id=None):
+            self.shown[notification_id] = (title, message)
+            self.log.append(("create", notification_id, title))
+
+        def dismiss(hass, notification_id):
+            self.shown.pop(notification_id, None)
+            self.log.append(("dismiss", notification_id, ""))
+
+        monkeypatch.setattr(learning_notice.persistent_notification, "async_create", create)
+        monkeypatch.setattr(learning_notice.persistent_notification, "async_dismiss", dismiss)
+
+    def created(self, kind: str) -> list[str]:
+        return [title for action, nid, title in self.log if action == "create" and nid.startswith(f"qlima_control_{kind}_")]
+
+
+async def test_a_check_is_announced_and_explained(hass, esp_device, sim_clock, monkeypatch):
+    """The first stop that fails is explained while it is checked, then the result replaces it."""
+    notices = Notices(monkeypatch)
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=1)
+    entry_id = plant.entity.entry.entry_id
+    while plant.entity._fm_offset["heat"] == 0:
+        await plant.run(1)
+        if plant.entity.follow_me_learning()["state"] == "checking_stop":
+            title, message = notices.shown[f"qlima_control_learning_{entry_id}"]
+            assert "lærer anlægget at kende" in title
+            assert "Hvorfor" in message and "Hvad sker der" in message and "ikke en fejl" in message
+        assert plant.clock.now < 1_000_000 + 8 * 3600
+    title, message = notices.shown[f"qlima_control_learning_{entry_id}"]
+    assert title.endswith("lært") and "+1°" in message and "Gemt" in message
+    assert len(notices.created("learning")) == 2  # one check, one result – nothing else
+
+
+async def test_everyday_cycles_stay_quiet(hass, esp_device, sim_clock, monkeypatch):
+    """A unit that does what it is told: normal start/stop delays are not shown as learning."""
+    notices = Notices(monkeypatch)
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=12.0, comp=0)
+    states = set()
+    for _ in range(10 * 60):
+        await plant.run(1)
+        states.add(plant.entity.follow_me_learning()["state"])
+    assert notices.log == []
+    assert not any(s.startswith("checking_") for s in states), states
+    assert plant.starts(10 * 60) >= 3
+    assert plant.entity.follow_me_learning()["state"] == "learned"
+
+
+async def test_follow_me_that_does_not_arrive_pauses_the_learning(hass, esp_device, sim_clock, monkeypatch):
+    """IR blocked: the unit falls back on its own sensor. Seen within minutes, nothing learned wrong."""
+    notices = Notices(monkeypatch)
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=1)
+    entity = plant.entity
+    await plant.run(6 * 60)
+    assert entity._fm_echo and entity._fm_offset["heat"] == 1
+    plant.ir_ok, plant.unit.fm = False, None
+    await plant.run(20)
+    assert entity.follow_me_learning()["state"] == "no_follow_me"
+    title, message = notices.shown[f"qlima_control_no_echo_{entity.entry.entry_id}"]
+    assert "når ikke frem" in title and "IR" in message
+    await plant.run(3 * 60)
+    assert entity._fm_offset["heat"] == 1 and not entity._fm_park["heat"]
+    plant.ir_ok = True
+    await plant.run(5)
+    assert entity.follow_me_learning()["state"] != "no_follow_me"
+    assert f"qlima_control_no_echo_{entity.entry.entry_id}" not in notices.shown
+
+
+async def test_a_fault_code_pauses_the_learning(hass, esp_device, sim_clock):
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=2)
+    hass.states.async_set("sensor.qlima_test_fejlkode", "5")
+    await plant.run(4 * 60)
+    info = plant.entity.follow_me_learning()
+    assert info["state"] == "paused" and info["reason"] == "fault"
+    assert plant.entity._fm_offset["heat"] == 0
+    hass.states.async_set("sensor.qlima_test_fejlkode", "0")
+    await plant.run(8 * 60)
+    assert plant.entity._fm_offset["heat"] == 2
+
+
+async def test_the_units_own_minimum_run_is_no_failed_stop(hass, esp_device, sim_clock):
+    """A small room overshoots fast; the unit runs its own 8 minutes regardless – not learned as an offset."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0, comp=0, unit={"own_min_run": 8})
+    plant.room.c = 1.2e6
+    await plant.run(8 * 60)
+    assert plant.entity._fm_offset["heat"] == 0, plant.entity._fm_history
+
+
+async def test_a_wrong_restored_offset_is_corrected_without_flip_flopping(hass, esp_device, sim_clock):
+    """Offset 1 marked as needed (min 1) on a unit that needs 0: lowered on the second stop in hold, then kept."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0, comp=0)
+    entity = plant.entity
+    entity._fm_offset["heat"] = entity._fm_min["heat"] = 1
+    await plant.run(12 * 60)
+    assert entity._fm_offset["heat"] == 0
+    changes = [(h["check"], h["change"]) for h in entity._fm_history]
+    assert changes.count(("stop", "offset_up")) == 0, changes
+    low, high = plant.band(4 * 60)
+    assert low >= 21.6 and high <= 22.6, (low, high)
+
+
+async def test_the_learning_can_be_reset(hass, esp_device, sim_clock, monkeypatch):
+    Notices(monkeypatch)
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, comp=1)
+    await plant.run(6 * 60)
+    entity = plant.entity
+    assert entity._fm_offset["heat"] == 1 and entity._fm_history
+    button = next(s for s in hass.states.async_all("button") if s.entity_id.endswith("reset_follow_me_learning"))
+    await hass.services.async_call("button", "press", {"entity_id": button.entity_id}, blocking=True)
+    assert entity._fm_offset["heat"] == 0 and entity._fm_history == []
+    assert entity.follow_me_learning()["state"] in ("learning", "paused")
+    await plant.run(6 * 60)
+    assert entity._fm_offset["heat"] == 1  # and learned again
+
+
+async def test_a_unit_that_stops_at_its_target_does_not_short_cycle(hass, esp_device, sim_clock):
+    """It stops as soon as it is told the room is on target: hold then rests like a stop."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0, unit={"stop_at": 0.0})
+    await plant.run(12 * 60)
+    assert plant.entity._fm_offset["heat"] == 0
+    assert plant.starts(6 * 60) <= 14
+    low, high = plant.band(6 * 60)
+    assert low >= 21.4 and high <= 22.4, (low, high)

@@ -20,7 +20,7 @@ _PROXIES = (
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     unit = hass.data[DOMAIN][f"{entry.entry_id}_unit"]
-    entities: list[ButtonEntity] = [ReleaseButton(hass, entry)]
+    entities: list[ButtonEntity] = [ReleaseButton(hass, entry), ResetLearningButton(hass, entry)]
     entities += [ProxyButton(hass, entry, role, icon, cat) for role, icon, cat in _PROXIES if unit.entity(role)]
     if unit.power_switch:
         entities.append(PowerCycleButton(hass, entry))
@@ -70,3 +70,20 @@ class PowerCycleButton(QlimaEntity, ButtonEntity):
         power = self.hass.data[DOMAIN].get(f"{self.entry.entry_id}_power")
         if power is not None:
             self.hass.async_create_task(power.async_power_cycle("button"))
+
+
+class ResetLearningButton(QlimaEntity, ButtonEntity):
+    """Forget the learned Follow Me offsets (e.g. after the unit was swapped) and learn again."""
+
+    _attr_icon = "mdi:school-outline"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry, "reset_learning")
+
+    def watched(self) -> list[str]:
+        return []
+
+    async def async_press(self) -> None:
+        if self.thermostat is not None:
+            self.thermostat.reset_follow_me_learning()

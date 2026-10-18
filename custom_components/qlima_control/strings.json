@@ -285,6 +285,9 @@
       },
       "power_cycle": {
         "name": "Restart unit (supply)"
+      },
+      "reset_learning": {
+        "name": "Reset Follow Me learning"
       }
     },
     "sensor": {
@@ -501,7 +504,8 @@
           "checking_stop": "Checking the stop",
           "checking_hold": "Checking the hold",
           "checking_start": "Checking the start",
-          "checking_rise": "Checking the heat-up"
+          "checking_rise": "Checking the heat-up",
+          "no_follow_me": "Follow Me not received"
         }
       }
     },

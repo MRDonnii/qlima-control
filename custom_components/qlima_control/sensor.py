@@ -186,7 +186,7 @@ class LearningSensor(_ThermostatSensor):
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
-        "off", "no_meter", "paused", "learning", "learned",
+        "off", "no_meter", "no_follow_me", "paused", "learning", "learned",
         "checking_stop", "checking_hold", "checking_start", "checking_rise",
     ]
     _attr_icon = "mdi:school-outline"
