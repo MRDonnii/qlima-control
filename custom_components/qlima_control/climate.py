@@ -91,8 +91,10 @@ _RETARGET_SECONDS = 300
 # Follow Me reaches the unit in whole degrees, and the unit starts a degree below its
 # target and stops a degree above – on the true room temperature it lets the room
 # drift ±0.5 K. While it regulates, the value sent is steered instead:
-#   start (target −1) once the room is _FM_START below, kept until the room reaches
-#     the target – full effort, no turning down before the target is reached;
+#   start (target −1, or the true room rounded away from the target when it is
+#     further off, so the unit sees the whole shortfall and works hard) once the
+#     room is _FM_START below, kept until the room reaches the target – full
+#     effort, no turning down before the target is reached;
 #   hold (the target) from there – a running unit modulates, a stopped one stays off;
 #   stop (target +1) once the room is _FM_STOP above – off before +0.5 K – kept
 #     until the room is _FM_START below again.
@@ -917,7 +919,16 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 step = "stop"
             else:
                 step = "hold"
-            value = {"start": unit_target - sign, "hold": unit_target, "stop": unit_target + sign}[step]
+            if step == "start":
+                # Never report the room closer to the target than it is: far below the
+                # target the unit must see the whole shortfall, or it idles along.
+                value = (
+                    min(float(math.floor(room)), unit_target - 1)
+                    if mode == HVACMode.HEAT
+                    else max(float(math.ceil(room)), unit_target + 1)
+                )
+            else:
+                value = {"hold": unit_target, "stop": unit_target + sign}[step]
         if (step, value) != (self._follow_me_step, self._follow_me_sent):
             self._follow_me_step, self._follow_me_sent = step, value
             if self.entity_id:

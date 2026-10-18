@@ -191,6 +191,21 @@ async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
     assert entity.follow_me_value(24.7) == 24  # 0.3 K cold: stop
 
 
+async def test_follow_me_shows_the_whole_shortfall_far_from_the_target(hass, clock):
+    """Target 30 with the room at 22.7: the unit must see 22, not 29, or it barely runs."""
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    await _follow_me(hass, entity, clock)
+    await entity.async_set_temperature(temperature=30)
+    pump.target = 30
+    pump.publish()
+    await hass.async_block_till_done()
+    assert entity.follow_me_value(22.7) == 22
+    assert entity.extra_state_attributes["follow_me_step"] == "start"
+    assert entity.follow_me_value(27.6) == 27   # still the true shortfall
+    assert entity.follow_me_value(29.4) == 29   # within a degree: target −1 as before
+    assert entity.follow_me_value(30.0) == 30   # reached: hold
+
+
 async def test_follow_me_is_the_room_when_the_thermostat_regulates(hass, clock):
     pump, entity = await _setup_pump(hass, clock, room_temp=21.0)
     await _follow_me(hass, entity, clock, on=False)

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.11
+- **Fix: the unit barely heated when the room was far below the target.** While the unit regulates on Follow Me, the start step sent "target − 1" however far off the room was – with the target at 30 °C and the room at 22.7 °C the unit was told the room was 29 °C, saw a one-degree shortfall and idled along. The start step now sends the true room temperature (rounded down; up when cooling) whenever that is further from the target, so the unit sees the whole shortfall and works hard. Within a degree of the target nothing changes.
+
 ## 1.7.10
 - **ESPs adopted in ESPHome can be updated from Home Assistant again.** The Firmware entity installs through Home Assistant's ESPHome Builder update for the device, which builds your own yaml (with its Wi-Fi and encryption key) and uploads it – the same as *Install* in ESPHome Builder. Wi-Fi and settings are kept.
   - Home Assistant creates that ESPHome Builder entity disabled; Qlima Control enables it for adopted Qlima ESPs.
