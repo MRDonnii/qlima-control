@@ -28,7 +28,9 @@
 esphome:
   project:
     name: mrdonnii.qlima-control
-    version: "1.3.4"
+    version: "1.4.0"
+  includes:
+    - <esp_wifi.h>   # WiFi-sendestyrke styres i drift (se interval nederst)
 
 external_components:
   - source: github://MRDonnii/qlima-control@main
@@ -51,6 +53,8 @@ api:
 # forsinkede kommandoer og flere korte udfald. ESP'en får strøm fra anlægget.
 wifi:
   power_save_mode: none
+# Sendestyrken ved opstart (output_power) sættes i din egen yaml – 8.5dB for ESP32-C3 SuperMini.
+# Bagefter styres den af "WiFi-sendestyrke" (Automatisk: lærer det højeste niveau, der holder).
 
 web_server:
   port: 80
@@ -99,6 +103,24 @@ globals:
   - id: filter_hours
     type: float
     restore_value: true
+    initial_value: '0'
+  # WiFi-sendestyrke: aktuelt niveau og højeste stabile niveau (indeks i listen i interval-lambdaen).
+  - id: tx_level
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: tx_cap
+    type: int
+    restore_value: true
+    initial_value: '5'
+  - id: tx_up_since
+    type: uint32_t
+    initial_value: '0'
+  - id: tx_down_since
+    type: uint32_t
+    initial_value: '0'
+  - id: tx_raised_at
+    type: uint32_t
     initial_value: '0'
 
 remote_transmitter:
@@ -212,6 +234,17 @@ sensor:
     name: Oppetid
     update_interval: 300s
     entity_category: diagnostic
+  - platform: template
+    name: WiFi-sendestyrke nu
+    icon: mdi:wifi-arrow-up-down
+    unit_of_measurement: dB
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      int8_t p = 0;
+      if (esp_wifi_get_max_tx_power(&p) != ESP_OK) return NAN;
+      return p / 4.0f;
 
 binary_sensor:
   - platform: template
@@ -264,7 +297,28 @@ switch:
     turn_off_action:
       - midea_ac.beeper_off:
 
+select:
+  - platform: template
+    id: tx_mode
+    name: WiFi-sendestyrke
+    icon: mdi:wifi-arrow-up-down
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    options: ["Automatisk", "8,5 dB", "11 dB", "13 dB", "15 dB", "17 dB", "19,5 dB"]
+    initial_option: "Automatisk"
+    on_value:
+      - lambda: 'id(tx_up_since) = 0; id(tx_raised_at) = 0;'
+
 button:
+  - platform: template
+    name: Lær WiFi-sendestyrke forfra
+    icon: mdi:wifi-refresh
+    entity_category: config
+    on_press:
+      - lambda: |-
+          id(tx_cap) = 5; id(tx_level) = 0; id(tx_up_since) = 0; id(tx_raised_at) = 0;
+          ESP_LOGI("wifi_tx", "Lærer sendestyrken forfra fra 8,5 dB");
   - platform: template
     name: Display
     icon: mdi:monitor
@@ -323,6 +377,57 @@ script:
                 beeper: false
 
 interval:
+  # WiFi-sendestyrke. ESP32-C3 SuperMini-boards kommer ofte ikke på WiFi ved fuld styrke, men ved lav styrke
+  # hører accesspointet dem svagt og smider dem af (Min RSSI). Derfor: forbind med det niveau, der virkede
+  # sidst; kommer forbindelsen ikke inden 30 s, prøv næste niveau; efter 15 min stabil drift ét trin op;
+  # falder den ud inden 10 min efter et trin op, bliver det forrige niveau det højeste stabile.
+  # Et fast niveau i "WiFi-sendestyrke" bruges, mens den er forbundet; uden forbindelse prøves alle niveauer.
+  - interval: 5s
+    then:
+      - lambda: |-
+          static const float LV[] = {8.5f, 11.0f, 13.0f, 15.0f, 17.0f, 19.5f};
+          static const int N = sizeof(LV) / sizeof(LV[0]);
+          static int8_t applied = -1;
+          const uint32_t now = millis();
+          const bool up = wifi::global_wifi_component->is_connected();
+          const int fixed = (int) id(tx_mode).active_index().value_or(0) - 1;   // -1 = Automatisk
+          int &lvl = id(tx_level);
+          int &cap = id(tx_cap);
+          if (lvl < 0 || lvl >= N) lvl = 0;
+          if (cap < 0 || cap >= N) cap = N - 1;
+          if (up) {
+            id(tx_down_since) = 0;
+            if (id(tx_up_since) == 0) id(tx_up_since) = now;
+            if (fixed >= 0) {
+              lvl = fixed;
+            } else {
+              if (id(tx_raised_at) != 0 && now - id(tx_raised_at) > 10UL * 60000UL) id(tx_raised_at) = 0;   // trinnet holdt
+              if (lvl < cap && now - id(tx_up_since) > 15UL * 60000UL) {
+                lvl++; id(tx_up_since) = now; id(tx_raised_at) = now;
+                ESP_LOGI("wifi_tx", "Stabil – prøver %.1f dB", LV[lvl]);
+              }
+            }
+          } else {
+            if (id(tx_up_since) != 0) {   // har lige mistet forbindelsen
+              if (fixed < 0 && id(tx_raised_at) != 0 && now - id(tx_raised_at) < 10UL * 60000UL && lvl > 0) {
+                cap = lvl - 1; lvl = cap;
+                ESP_LOGW("wifi_tx", "Faldt ud efter trin op – højeste stabile niveau er %.1f dB", LV[cap]);
+              }
+              id(tx_up_since) = 0; id(tx_raised_at) = 0;
+            }
+            if (id(tx_down_since) == 0) {
+              id(tx_down_since) = now;
+            } else if (now - id(tx_down_since) > 30000UL) {
+              lvl = (lvl + 1) % N; id(tx_down_since) = now;
+              ESP_LOGW("wifi_tx", "Ingen forbindelse – prøver %.1f dB", LV[lvl]);
+            }
+          }
+          const int8_t want = (int8_t) (LV[lvl] * 4.0f);
+          int8_t cur = 0;
+          const bool read = esp_wifi_get_max_tx_power(&cur) == ESP_OK;
+          if (want != applied || (read && abs(cur - want) > 4)) {
+            if (esp_wifi_set_max_tx_power(want) == ESP_OK) applied = want;
+          }
   - interval: 60s
     then:
       - lambda: |-

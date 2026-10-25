@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.2 (firmware 1.4.0)
+- **WiFi transmit power that adapts.** ESP32-C3 SuperMini boards often fail to join WiFi at full power, so the image starts at 8.5 dB – but at that level the access point hears them weakly and drops them (e.g. with a minimum-RSSI setting). New *WiFi-sendestyrke* select (Automatisk / 8,5–19,5 dB): automatic mode joins with the level that worked last, tries the next level when no connection comes within 30 s, steps one level up after 15 min of stable connection and, if the link drops within 10 min of a step up, remembers the level below as the highest stable one. A fixed level is used while connected; without a connection all levels are tried, so a board can't get stranded.
+- *WiFi-sendestyrke nu* sensor (dB actually in use) and a *Lær WiFi-sendestyrke forfra* button to start over from 8.5 dB (after moving an access point).
+
 ## 1.10.1
 - What the learning has learned (stop and start level, confirmations, weather) is shown also while the thermostat is off – for the mode it steered last (heat before it ever ran).
 
