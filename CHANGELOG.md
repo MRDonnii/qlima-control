@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.4 (firmware 1.4.5)
+- Maintenance: update test after the repository move. No functional changes.
+
 ## 1.10.3 (firmware 1.4.5)
 - Cleanup: personal examples removed. No functional changes.
 
