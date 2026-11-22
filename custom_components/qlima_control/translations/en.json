@@ -1,0 +1,686 @@
+{
+  "title": "Qlima Control",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add heat pump",
+        "description": "Choose the ESP in the unit and link the room's sensors. Everything can be changed later.",
+        "data": {
+          "name": "Name",
+          "device_id": "ESP in the unit",
+          "model": "Model"
+        },
+        "data_description": {
+          "device_id": "The ESPHome device plugged into the unit's USB port.",
+          "model": "Sets the compressor's maximum power for the COP model."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Room sensors",
+            "data": {
+              "temperature_sensors": "Room temperature sensors",
+              "temperature_mode": "Combine sensors as",
+              "humidity_sensors": "Humidity sensors",
+              "outdoor_sensor": "Outdoor temperature",
+              "price_sensor": "Electricity price"
+            },
+            "data_description": {
+              "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+              "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
+              "price_sensor": "Price sensor from Strømligning, Nord Pool, Energi Data Service, Tibber or another monetary sensor. Gives heat price, cost per hour and cost today/this month."
+            }
+          },
+          "power": {
+            "name": "Power and Shelly",
+            "data": {
+              "power_sensor": "Power meter",
+              "energy_sensor": "Energy meter",
+              "power_switch": "Supply switch (e.g. Shelly)",
+              "auto_power_cycle_minutes": "Auto-restart when not responding for",
+              "running_power_w": "Running above",
+              "p_max": "Max electrical power (override)"
+            },
+            "data_description": {
+              "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
+              "power_switch": "The relay feeding the unit. Gives a mains switch and a restart button.",
+              "auto_power_cycle_minutes": "0 = off. Cuts the supply for 30 s, at most once an hour."
+            }
+          },
+          "openings": {
+            "name": "Doors and windows",
+            "data": {
+              "opening_sensors": "Doors and windows",
+              "opening_min_delay_minutes": "Turn down after",
+              "opening_off_delay_minutes": "Switch off after",
+              "opening_resume_delay_minutes": "Resume after closed for",
+              "opening_reduce_to": "Turn down to"
+            },
+            "data_description": {}
+          },
+          "control": {
+            "name": "Control",
+            "data": {
+              "heat_target": "Heat target",
+              "cool_target": "Cool target",
+              "start_hysteresis": "Start below target by",
+              "hysteresis": "Stop above target by",
+              "min_run_minutes": "Minimum run time",
+              "min_off_minutes": "Minimum off time",
+              "manual_override_minutes": "Manual override (remote) lasts",
+              "setpoint_compensation": "Setpoint compensation",
+              "presence_entity": "Presence (person, group, alarm)",
+              "away_setback": "Away setback"
+            },
+            "data_description": {
+              "setpoint_compensation": "Not needed with Follow Me.",
+              "presence_entity": "Away lowers the heat target (and raises the cool target)."
+            }
+          },
+          "notifications": {
+            "name": "Notifications",
+            "data": {
+              "notify_service": "Notify service",
+              "filter_alarm_hours": "Filter reminder after"
+            },
+            "data_description": {
+              "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "thermostats_to_disable": "Pause these thermostats while running",
+              "sensor_stable_seconds": "Sensor must be stable for",
+              "sensor_loss_grace_seconds": "Grace when sensors are missing"
+            },
+            "data_description": {}
+          }
+        }
+      },
+      "weights": {
+        "title": "Weight of each sensor",
+        "description": "Give each room sensor a weight in %. The weights are relative – a sensor that is offline is left out and the others share its weight.\n\n{sensors}"
+      }
+    },
+    "error": {
+      "no_climate": "That device has no Qlima/Midea climate entity – is it running the Qlima Control firmware?",
+      "no_temperature": "Choose at least one room temperature sensor.",
+      "off_before_min": "Switch-off must come after turn-down.",
+      "cool_must_exceed_heat": "The cool target must be above the heat target."
+    },
+    "abort": {
+      "already_configured": "This unit is already added."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Settings",
+        "description": "Choose what to change.",
+        "menu_options": {
+          "device": "Unit",
+          "sensors": "Room sensors",
+          "power": "Power and Shelly",
+          "openings": "Doors and windows",
+          "control": "Control",
+          "smart": "Price and wake-up",
+          "notifications": "Notifications",
+          "advanced": "Advanced"
+        }
+      },
+      "device": {
+        "title": "Unit",
+        "data": {
+          "device_id": "ESP in the unit",
+          "model": "Model"
+        },
+        "data_description": {
+          "device_id": "The ESPHome device plugged into the unit's USB port.",
+          "model": "Sets the compressor's maximum power for the COP model."
+        }
+      },
+      "sensors": {
+        "title": "Room sensors",
+        "data": {
+          "temperature_sensors": "Room temperature sensors",
+          "temperature_mode": "Combine sensors as",
+          "humidity_sensors": "Humidity sensors",
+          "outdoor_sensor": "Outdoor temperature",
+          "price_sensor": "Electricity price"
+        },
+        "data_description": {
+          "temperature_sensors": "One or more; the unit regulates on these (sent to it as Follow Me).",
+          "outdoor_sensor": "Optional – otherwise the outdoor unit's own sensor.",
+          "price_sensor": "Price sensor from Strømligning, Nord Pool, Energi Data Service, Tibber or another monetary sensor. Gives heat price, cost per hour and cost today/this month."
+        }
+      },
+      "power": {
+        "title": "Power and Shelly",
+        "data": {
+          "power_sensor": "Power meter",
+          "energy_sensor": "Energy meter",
+          "power_switch": "Supply switch (e.g. Shelly)",
+          "auto_power_cycle_minutes": "Auto-restart when not responding for",
+          "running_power_w": "Running above",
+          "p_max": "Max electrical power (override)"
+        },
+        "data_description": {
+          "power_sensor": "E.g. the Shelly on the unit's supply. Gives heating/cooling, COP load and heat output.",
+          "power_switch": "The relay feeding the unit. Gives a mains switch and a restart button.",
+          "auto_power_cycle_minutes": "0 = off. Cuts the supply for 30 s, at most once an hour."
+        }
+      },
+      "openings": {
+        "title": "Doors and windows",
+        "data": {
+          "opening_sensors": "Doors and windows",
+          "opening_min_delay_minutes": "Turn down after",
+          "opening_off_delay_minutes": "Switch off after",
+          "opening_resume_delay_minutes": "Resume after closed for",
+          "opening_reduce_to": "Turn down to"
+        },
+        "data_description": {
+          "opening_reduce_to": "When the unit regulates itself (Follow Me), an open door/window always turns it down to the minimum."
+        }
+      },
+      "control": {
+        "title": "Control",
+        "data": {
+          "regulation": "Regulation",
+          "heat_target": "Heat target",
+          "cool_target": "Cool target",
+          "start_hysteresis": "Start below target by",
+          "hysteresis": "Stop above target by",
+          "min_run_minutes": "Minimum run time",
+          "min_off_minutes": "Minimum off time",
+          "manual_override_minutes": "Manual override (remote) lasts",
+          "setpoint_compensation": "Setpoint compensation",
+          "presence_entity": "Presence (person, group, alarm)",
+          "away_setback": "Away setback"
+        },
+        "data_description": {
+          "regulation": "The unit: it gets the room temperature as Follow Me and holds the target itself (no on/off cycling, no idling at 17 °C). The thermostat: on/off with hysteresis and a neutral idle at the lowest target. The unit falls back to the thermostat while Follow Me is off.",
+          "setpoint_compensation": "Not needed with Follow Me.",
+          "presence_entity": "Away lowers the heat target (and raises the cool target)."
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "data": {
+          "notify_service": "Notify service",
+          "filter_alarm_hours": "Filter reminder after"
+        },
+        "data_description": {
+          "notify_service": "E.g. notify.mobile_app_phone – unit not responding, filter, door/window."
+        }
+      },
+      "advanced": {
+        "title": "Advanced",
+        "data": {
+          "thermostats_to_disable": "Pause these thermostats while running",
+          "sensor_stable_seconds": "Sensor must be stable for",
+          "sensor_loss_grace_seconds": "Grace when sensors are missing"
+        },
+        "data_description": {}
+      },
+      "weights": {
+        "title": "Weight of each sensor",
+        "description": "Give each room sensor a weight in %. The weights are relative – a sensor that is offline is left out and the others share its weight.\n\n{sensors}"
+      },
+      "smart": {
+        "title": "Price and wake-up",
+        "description": "Price steering moves the target a whole degree up in cheap periods and down in expensive ones (cooling: the other way). Wake-up cuts the supply for 30 s when the unit idles on low power while the room stays below target – Midea-type units only work hard again after a power-cycle. At most 3 wake-ups a day, 2 hours apart.",
+        "data": {
+          "price_control": "Price steering",
+          "price_cheap_offset": "Up in cheap periods",
+          "price_expensive_offset": "Down in expensive periods",
+          "price_resolution": "Price periods",
+          "price_resolution_entity": "Follow resolution from entity",
+          "auto_wake": "Wake the unit when it idles",
+          "wake_power_w": "Counts as idling below",
+          "wake_minutes": "Idling for at least",
+          "wake_deficit": "Room below target by at least"
+        },
+        "data_description": {
+          "price_resolution_entity": "Optional: a select whose state says '15 min' or 'time'/'hour' – used when 'Price periods' is Auto.",
+          "wake_power_w": "Electric power below this while the room is cold counts as the unit not trying."
+        }
+      }
+    },
+    "error": {
+      "no_climate": "That device has no Qlima/Midea climate entity – is it running the Qlima Control firmware?",
+      "no_temperature": "Choose at least one room temperature sensor.",
+      "off_before_min": "Switch-off must come after turn-down.",
+      "cool_must_exceed_heat": "The cool target must be above the heat target."
+    }
+  },
+  "entity": {
+    "select": {
+      "unit_preset": {
+        "name": "Unit preset",
+        "state": {
+          "none": "Normal",
+          "eco": "Eco",
+          "comfort": "Comfort",
+          "boost": "Boost",
+          "sleep": "Sleep"
+        }
+      }
+    },
+    "button": {
+      "release": {
+        "name": "Release"
+      },
+      "swing_toggle": {
+        "name": "Swing on/off"
+      },
+      "swing_step": {
+        "name": "Louver one step"
+      },
+      "display": {
+        "name": "Display"
+      },
+      "filter_reset": {
+        "name": "Reset filter counter"
+      },
+      "power_cycle": {
+        "name": "Restart unit (supply)"
+      },
+      "reset_learning": {
+        "name": "Reset Follow Me learning"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "off": "Off",
+          "manual": "Manual override",
+          "opening_off": "Off – door/window open",
+          "opening_reduced": "Turned down – door/window open",
+          "opening_resume_wait": "Waiting to resume",
+          "opening_reduce_wait": "Door/window open",
+          "sensor_lost": "Sensor lost",
+          "start_wait": "Waiting to start",
+          "heating": "Heating",
+          "cooling": "Cooling",
+          "drying": "Drying",
+          "fan_only": "Fan only",
+          "idle": "Idle"
+        }
+      },
+      "next_change": {
+        "name": "Next change",
+        "state_attributes": {
+          "event": {
+            "name": "Event",
+            "state": {
+              "manual_override": "Manual override ends",
+              "opening_reduce": "Turn down",
+              "opening_off": "Switch off",
+              "opening_resume": "Resume",
+              "start_allowed": "Start",
+              "min_run": "Minimum run ends",
+              "sensor_loss": "Pause for sensor loss"
+            }
+          }
+        }
+      },
+      "countdown_manual_override": {
+        "name": "Manual override ends"
+      },
+      "countdown_opening_reduce": {
+        "name": "Door/window: turn down at"
+      },
+      "countdown_opening_off": {
+        "name": "Door/window: switch off at"
+      },
+      "countdown_opening_resume": {
+        "name": "Door/window: resume at"
+      },
+      "countdown_start_allowed": {
+        "name": "Start allowed at"
+      },
+      "countdown_min_run": {
+        "name": "Minimum run ends"
+      },
+      "countdown_sensor_loss": {
+        "name": "Sensor loss: pause at"
+      },
+      "room_temperature": {
+        "name": "Room temperature"
+      },
+      "room_humidity": {
+        "name": "Room humidity"
+      },
+      "outdoor_temperature": {
+        "name": "Outdoor temperature"
+      },
+      "unit_temperature": {
+        "name": "Unit sensor"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "heat_output": {
+        "name": "Heat output"
+      },
+      "heat_price": {
+        "name": "Heat price"
+      },
+      "cost_per_hour": {
+        "name": "Cost per hour"
+      },
+      "filter_hours": {
+        "name": "Hours since filter cleaning"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "energy": {
+        "name": "Energy"
+      },
+      "energy_today": {
+        "name": "Energy today"
+      },
+      "energy_month": {
+        "name": "Energy this month"
+      },
+      "cost_today": {
+        "name": "Cost today"
+      },
+      "cost_month": {
+        "name": "Cost this month"
+      },
+      "runtime_today": {
+        "name": "Runtime today"
+      },
+      "starts_today": {
+        "name": "Starts today"
+      },
+      "defrosts_today": {
+        "name": "Defrosts today"
+      },
+      "supply_temperature": {
+        "name": "Supply air"
+      },
+      "return_temperature": {
+        "name": "Return air"
+      },
+      "measured_heat_output": {
+        "name": "Heat output (measured)"
+      },
+      "measured_cop": {
+        "name": "COP (measured)"
+      },
+      "price_level": {
+        "name": "Price level",
+        "state": {
+          "off": "Off",
+          "unknown": "No forecast",
+          "cheap": "Cheap",
+          "normal": "Normal",
+          "expensive": "Expensive"
+        }
+      },
+      "wake_status": {
+        "name": "Wake-up",
+        "state": {
+          "off": "Off",
+          "busy": "Restarting",
+          "not_running": "Not heating",
+          "unit_not_on": "Unit not on",
+          "defrosting": "Defrosting",
+          "no_data": "No data",
+          "on_target": "On target",
+          "working": "Working",
+          "stalled": "Idling – will wake"
+        }
+      },
+      "esp_status": {
+        "name": "ESP32 status",
+        "state": {
+          "online": "Connected",
+          "unit_silent": "Unit not answering",
+          "update": "New firmware ready",
+          "offline": "Not connected"
+        },
+        "state_attributes": {
+          "firmware": {
+            "name": "Firmware"
+          },
+          "newest_firmware": {
+            "name": "Newest firmware"
+          },
+          "firmware_up_to_date": {
+            "name": "Firmware up to date"
+          },
+          "esphome": {
+            "name": "ESPHome"
+          },
+          "ip": {
+            "name": "IP address"
+          },
+          "mac": {
+            "name": "MAC"
+          },
+          "wifi_signal": {
+            "name": "Wi-Fi signal (dBm)"
+          },
+          "uptime_hours": {
+            "name": "Uptime (h)"
+          },
+          "unit_responding": {
+            "name": "Unit answering"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "name": {
+            "name": "Name"
+          }
+        }
+      },
+      "esp_wifi_signal": {
+        "name": "ESP32 Wi-Fi signal"
+      },
+      "esp_uptime": {
+        "name": "ESP32 uptime"
+      },
+      "esp_ip_address": {
+        "name": "ESP32 IP address"
+      },
+      "esp_esphome_version": {
+        "name": "ESP32 ESPHome version"
+      },
+      "follow_me_learning": {
+        "name": "Follow Me learning",
+        "state": {
+          "off": "Off",
+          "no_meter": "No power meter",
+          "paused": "Paused",
+          "learning": "Learning",
+          "learned": "Learned",
+          "checking_stop": "Checking the stop",
+          "checking_hold": "Checking the hold",
+          "checking_start": "Checking the start",
+          "no_follow_me": "Follow Me not received"
+        }
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "status": {
+            "name": "Status",
+            "state": {
+              "off": "Off",
+              "manual": "Manual override",
+              "opening_off": "Off – door/window open",
+              "opening_reduced": "Turned down – door/window open",
+              "opening_resume_wait": "Waiting to resume",
+              "opening_reduce_wait": "Door/window open",
+              "sensor_lost": "Sensor lost",
+              "start_wait": "Waiting to start",
+              "heating": "Heating",
+              "cooling": "Cooling",
+              "drying": "Drying",
+              "fan_only": "Fan only",
+              "idle": "Idle"
+            }
+          },
+          "next_event": {
+            "name": "Next event",
+            "state": {
+              "manual_override": "Manual override ends",
+              "opening_reduce": "Turn down",
+              "opening_off": "Switch off",
+              "opening_resume": "Resume",
+              "start_allowed": "Start",
+              "min_run": "Minimum run ends",
+              "sensor_loss": "Pause for sensor loss"
+            }
+          },
+          "next_change_timestamp": {
+            "name": "Next change"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "heating": {
+        "name": "Heating"
+      },
+      "cooling": {
+        "name": "Cooling"
+      },
+      "unit_online": {
+        "name": "Unit responding"
+      },
+      "opening": {
+        "name": "Door/window open"
+      },
+      "no_power": {
+        "name": "Running without power"
+      },
+      "defrosting": {
+        "name": "Defrosting"
+      },
+      "esp_connected": {
+        "name": "ESP32 connected"
+      }
+    },
+    "switch": {
+      "follow_me": {
+        "name": "Follow Me"
+      },
+      "beep": {
+        "name": "Beep"
+      },
+      "mains": {
+        "name": "Supply"
+      },
+      "openings_enabled": {
+        "name": "React to doors and windows"
+      },
+      "price_control": {
+        "name": "Price steering"
+      },
+      "auto_wake": {
+        "name": "Wake when idling"
+      },
+      "turbo": {
+        "name": "Turbo 30 min"
+      }
+    },
+    "number": {
+      "opening_reduce_after": {
+        "name": "Door/window: turn down after"
+      },
+      "opening_off_after": {
+        "name": "Door/window: switch off after"
+      },
+      "opening_resume_after": {
+        "name": "Door/window: resume after closed"
+      },
+      "price_cheap_offset": {
+        "name": "Price: up when cheap"
+      },
+      "price_expensive_offset": {
+        "name": "Price: down when expensive"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "s5225": "Qlima S 5225 / SC 5225",
+        "s5232": "Qlima S 5232 / SC 5232",
+        "custom": "Other Midea unit"
+      }
+    },
+    "temperature_mode": {
+      "options": {
+        "mean": "Average",
+        "min": "Coldest",
+        "max": "Warmest",
+        "weighted": "Weighted (%)"
+      }
+    },
+    "opening_reduce_to": {
+      "options": {
+        "setpoint": "The target (keeps the room)",
+        "minimum": "The minimum (17 °C)"
+      }
+    },
+    "price_resolution": {
+      "options": {
+        "auto": "Auto",
+        "quarter": "Quarter of an hour",
+        "hour": "Hour"
+      }
+    },
+    "regulation": {
+      "options": {
+        "unit": "The unit holds the target (Follow Me)",
+        "thermostat": "The thermostat (hysteresis, idle at the minimum)"
+      }
+    }
+  },
+  "issues": {
+    "old_firmware": {
+      "title": "{name}: ESP firmware is too old",
+      "description": "The ESP in {name} does not have the set_room_temperature action, so Follow Me gets no room temperature. Update the firmware (web installer or ESPHome)."
+    },
+    "missing_sensors": {
+      "title": "{name}: room sensors not found",
+      "description": "These room temperature sensors do not exist: {sensors}. Choose new ones under Configure → Room sensors."
+    },
+    "no_esp": {
+      "title": "{name}: the ESP in the unit was not found",
+      "description": "The heat pump climate entity of the chosen ESP is missing. Check that the ESP is online and added in ESPHome, or choose it again under Configure → Unit."
+    }
+  },
+  "exceptions": {
+    "turbo_not_running": {
+      "message": "Turbo only works while the unit heats or cools."
+    },
+    "turbo_no_boost": {
+      "message": "The unit has no boost preset."
+    },
+    "preset_not_in_mode": {
+      "message": "The unit does not take “{preset}” in mode {mode}."
+    },
+    "preset_not_accepted": {
+      "message": "The unit did not take “{preset}”."
+    },
+    "install_own_yaml": {
+      "message": "Cannot verify that this ESP runs the factory image, and ESPHome Builder does not know it. If you adopted it in ESPHome, update it from ESPHome Builder (or enable the device's ESPHome update entity to install from here). Otherwise flash the latest factory image with the web installer – without erasing."
+    }
+  }
+}

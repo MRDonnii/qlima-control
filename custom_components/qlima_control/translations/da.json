@@ -1,0 +1,686 @@
+{
+  "title": "Qlima Control",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tilføj varmepumpe",
+        "description": "Vælg ESP'en i anlægget og kobl rummets sensorer på. Alt kan ændres senere.",
+        "data": {
+          "name": "Navn",
+          "device_id": "ESP i anlægget",
+          "model": "Model"
+        },
+        "data_description": {
+          "device_id": "ESPHome-enheden i anlæggets USB-port.",
+          "model": "Bestemmer kompressorens maksimale effekt i COP-modellen."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Rumfølere",
+            "data": {
+              "temperature_sensors": "Rumtemperatur-følere",
+              "temperature_mode": "Saml følere som",
+              "humidity_sensors": "Fugtighedsfølere",
+              "outdoor_sensor": "Udetemperatur",
+              "price_sensor": "Elpris"
+            },
+            "data_description": {
+              "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
+              "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
+              "price_sensor": "Prissensor fra Strømligning, Nord Pool, Energi Data Service, Tibber eller en anden sensor i kroner. Giver varmepris, pris pr. time og pris i dag/måned."
+            }
+          },
+          "power": {
+            "name": "Strøm og Shelly",
+            "data": {
+              "power_sensor": "Effektmåler (W)",
+              "energy_sensor": "Energimåler (kWh)",
+              "power_switch": "Strømkontakt (fx Shelly)",
+              "auto_power_cycle_minutes": "Genstart automatisk når den ikke har svaret i",
+              "running_power_w": "Kører over",
+              "p_max": "Maks. el-effekt (overstyr)"
+            },
+            "data_description": {
+              "power_sensor": "Fx Shelly på anlæggets forsyning. Giver varmer/køler, COP-belastning og varmeeffekt.",
+              "power_switch": "Relæet der forsyner anlægget. Giver en strømkontakt og en genstart-knap.",
+              "auto_power_cycle_minutes": "0 = fra. Slukker strømmen i 30 sek., højst én gang i timen."
+            }
+          },
+          "openings": {
+            "name": "Døre og vinduer",
+            "data": {
+              "opening_sensors": "Døre og vinduer",
+              "opening_min_delay_minutes": "Skru ned efter",
+              "opening_off_delay_minutes": "Sluk efter",
+              "opening_resume_delay_minutes": "Genoptag efter lukket i",
+              "opening_reduce_to": "Skru ned til"
+            },
+            "data_description": {}
+          },
+          "control": {
+            "name": "Styring",
+            "data": {
+              "heat_target": "Mål ved varme",
+              "cool_target": "Mål ved køl",
+              "start_hysteresis": "Start under målet med",
+              "hysteresis": "Stop over målet med",
+              "min_run_minutes": "Min. kørselstid",
+              "min_off_minutes": "Min. pause",
+              "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
+              "setpoint_compensation": "Setpunkt-kompensation",
+              "presence_entity": "Tilstedeværelse (person, gruppe, alarm)",
+              "away_setback": "Sænkning når væk"
+            },
+            "data_description": {
+              "setpoint_compensation": "Ikke nødvendig med Follow Me.",
+              "presence_entity": "Når I er væk, sænkes målet ved varme (og hæves ved køl)."
+            }
+          },
+          "notifications": {
+            "name": "Notifikationer",
+            "data": {
+              "notify_service": "Notifikation (notify-tjeneste)",
+              "filter_alarm_hours": "Filter-påmindelse efter"
+            },
+            "data_description": {
+              "notify_service": "Fx notify.mobile_app_telefon – anlæg svarer ikke, filter, dør/vindue."
+            }
+          },
+          "advanced": {
+            "name": "Avanceret",
+            "data": {
+              "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
+              "sensor_stable_seconds": "Føler skal være stabil i",
+              "sensor_loss_grace_seconds": "Frist når følere mangler"
+            },
+            "data_description": {}
+          }
+        }
+      },
+      "weights": {
+        "title": "Vægt på hver føler",
+        "description": "Giv hver rumføler en vægt i %. Vægtene er relative – er en føler offline, udelades den, og de andre deler dens vægt.\n\n{sensors}"
+      }
+    },
+    "error": {
+      "no_climate": "Enheden har ingen Qlima/Midea-klimaenhed – kører den Qlima Control-firmwaren?",
+      "no_temperature": "Vælg mindst én rumtemperatur-føler.",
+      "off_before_min": "Sluk skal komme efter skru ned.",
+      "cool_must_exceed_heat": "Målet ved køl skal være over målet ved varme."
+    },
+    "abort": {
+      "already_configured": "Anlægget er allerede tilføjet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Indstillinger",
+        "description": "Vælg hvad du vil ændre.",
+        "menu_options": {
+          "device": "Anlæg",
+          "sensors": "Rumfølere",
+          "power": "Strøm og Shelly",
+          "openings": "Døre og vinduer",
+          "control": "Styring",
+          "smart": "Pris og vækning",
+          "notifications": "Notifikationer",
+          "advanced": "Avanceret"
+        }
+      },
+      "device": {
+        "title": "Anlæg",
+        "data": {
+          "device_id": "ESP i anlægget",
+          "model": "Model"
+        },
+        "data_description": {
+          "device_id": "ESPHome-enheden i anlæggets USB-port.",
+          "model": "Bestemmer kompressorens maksimale effekt i COP-modellen."
+        }
+      },
+      "sensors": {
+        "title": "Rumfølere",
+        "data": {
+          "temperature_sensors": "Rumtemperatur-følere",
+          "temperature_mode": "Saml følere som",
+          "humidity_sensors": "Fugtighedsfølere",
+          "outdoor_sensor": "Udetemperatur",
+          "price_sensor": "Elpris"
+        },
+        "data_description": {
+          "temperature_sensors": "En eller flere – anlægget regulerer efter dem (sendes som Follow Me).",
+          "outdoor_sensor": "Valgfri – ellers udedelens egen føler.",
+          "price_sensor": "Prissensor fra Strømligning, Nord Pool, Energi Data Service, Tibber eller en anden sensor i kroner. Giver varmepris, pris pr. time og pris i dag/måned."
+        }
+      },
+      "power": {
+        "title": "Strøm og Shelly",
+        "data": {
+          "power_sensor": "Effektmåler (W)",
+          "energy_sensor": "Energimåler (kWh)",
+          "power_switch": "Strømkontakt (fx Shelly)",
+          "auto_power_cycle_minutes": "Genstart automatisk når den ikke har svaret i",
+          "running_power_w": "Kører over",
+          "p_max": "Maks. el-effekt (overstyr)"
+        },
+        "data_description": {
+          "power_sensor": "Fx Shelly på anlæggets forsyning. Giver varmer/køler, COP-belastning og varmeeffekt.",
+          "power_switch": "Relæet der forsyner anlægget. Giver en strømkontakt og en genstart-knap.",
+          "auto_power_cycle_minutes": "0 = fra. Slukker strømmen i 30 sek., højst én gang i timen."
+        }
+      },
+      "openings": {
+        "title": "Døre og vinduer",
+        "data": {
+          "opening_sensors": "Døre og vinduer",
+          "opening_min_delay_minutes": "Skru ned efter",
+          "opening_off_delay_minutes": "Sluk efter",
+          "opening_resume_delay_minutes": "Genoptag efter lukket i",
+          "opening_reduce_to": "Skru ned til"
+        },
+        "data_description": {
+          "opening_reduce_to": "Når anlægget selv regulerer (Follow Me), skrues der altid ned til minimum ved åben dør/vindue."
+        }
+      },
+      "control": {
+        "title": "Styring",
+        "data": {
+          "regulation": "Regulering",
+          "heat_target": "Mål ved varme",
+          "cool_target": "Mål ved køl",
+          "start_hysteresis": "Start under målet med",
+          "hysteresis": "Stop over målet med",
+          "min_run_minutes": "Min. kørselstid",
+          "min_off_minutes": "Min. pause",
+          "manual_override_minutes": "Manuel overstyring (fjernbetjening) varer",
+          "setpoint_compensation": "Setpunkt-kompensation",
+          "presence_entity": "Tilstedeværelse (person, gruppe, alarm)",
+          "away_setback": "Sænkning når væk"
+        },
+        "data_description": {
+          "regulation": "Anlægget: det får rumtemperaturen som Follow Me og holder selv målet (ingen tænd/sluk, ingen pause på 17 °C). Termostaten: tænd/sluk med hysterese og pause på laveste mål. Anlægget bruger termostaten, mens Follow Me er slået fra.",
+          "setpoint_compensation": "Ikke nødvendig med Follow Me.",
+          "presence_entity": "Når I er væk, sænkes målet ved varme (og hæves ved køl)."
+        }
+      },
+      "notifications": {
+        "title": "Notifikationer",
+        "data": {
+          "notify_service": "Notifikation (notify-tjeneste)",
+          "filter_alarm_hours": "Filter-påmindelse efter"
+        },
+        "data_description": {
+          "notify_service": "Fx notify.mobile_app_telefon – anlæg svarer ikke, filter, dør/vindue."
+        }
+      },
+      "advanced": {
+        "title": "Avanceret",
+        "data": {
+          "thermostats_to_disable": "Sæt disse termostater på pause mens den kører",
+          "sensor_stable_seconds": "Føler skal være stabil i",
+          "sensor_loss_grace_seconds": "Frist når følere mangler"
+        },
+        "data_description": {}
+      },
+      "weights": {
+        "title": "Vægt på hver føler",
+        "description": "Giv hver rumføler en vægt i %. Vægtene er relative – er en føler offline, udelades den, og de andre deler dens vægt.\n\n{sensors}"
+      },
+      "smart": {
+        "title": "Pris og vækning",
+        "description": "Prisstyring hæver målet en hel grad i billige perioder og sænker det i dyre (køl: omvendt). Vækning slår strømmen fra i 30 s, når anlægget kører på lavt blus, mens rummet er under målet – Midea-anlæg arbejder først igen efter en strømafbrydelse. Højst 3 vækninger i døgnet med 2 timer imellem.",
+        "data": {
+          "price_control": "Prisstyring",
+          "price_cheap_offset": "Op i billige perioder",
+          "price_expensive_offset": "Ned i dyre perioder",
+          "price_resolution": "Prisperioder",
+          "price_resolution_entity": "Følg opløsning fra entity",
+          "auto_wake": "Væk anlægget, når det slumrer",
+          "wake_power_w": "Slumrer under",
+          "wake_minutes": "Slumrer i mindst",
+          "wake_deficit": "Rummet under målet med mindst"
+        },
+        "data_description": {
+          "price_resolution_entity": "Valgfri: en select hvis tilstand siger '15 min' eller 'time' – bruges når 'Prisperioder' er Auto.",
+          "wake_power_w": "Eleffekt under dette, mens rummet er for koldt, tæller som at anlægget ikke prøver."
+        }
+      }
+    },
+    "error": {
+      "no_climate": "Enheden har ingen Qlima/Midea-klimaenhed – kører den Qlima Control-firmwaren?",
+      "no_temperature": "Vælg mindst én rumtemperatur-føler.",
+      "off_before_min": "Sluk skal komme efter skru ned.",
+      "cool_must_exceed_heat": "Målet ved køl skal være over målet ved varme."
+    }
+  },
+  "entity": {
+    "select": {
+      "unit_preset": {
+        "name": "Varmepumpe-program",
+        "state": {
+          "none": "Normal",
+          "eco": "Eco",
+          "comfort": "Komfort",
+          "boost": "Boost",
+          "sleep": "Nat"
+        }
+      }
+    },
+    "button": {
+      "release": {
+        "name": "Frigiv"
+      },
+      "swing_toggle": {
+        "name": "Sving til/fra"
+      },
+      "swing_step": {
+        "name": "Lamel ét trin"
+      },
+      "display": {
+        "name": "Display"
+      },
+      "filter_reset": {
+        "name": "Nulstil filtertæller"
+      },
+      "power_cycle": {
+        "name": "Genstart anlæg (strøm)"
+      },
+      "reset_learning": {
+        "name": "Nulstil Follow Me-indlæring"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "off": "Slukket",
+          "manual": "Manuel overstyring",
+          "opening_off": "Slukket – dør/vindue åben",
+          "opening_reduced": "Skruet ned – dør/vindue åben",
+          "opening_resume_wait": "Venter på at genoptage",
+          "opening_reduce_wait": "Dør/vindue åben",
+          "sensor_lost": "Sensor væk",
+          "start_wait": "Venter på start",
+          "heating": "Varmer",
+          "cooling": "Køler",
+          "drying": "Affugter",
+          "fan_only": "Kun blæser",
+          "idle": "Tomgang"
+        }
+      },
+      "next_change": {
+        "name": "Næste skift",
+        "state_attributes": {
+          "event": {
+            "name": "Hændelse",
+            "state": {
+              "manual_override": "Manuel overstyring slutter",
+              "opening_reduce": "Skrues ned",
+              "opening_off": "Slukker",
+              "opening_resume": "Genoptager",
+              "start_allowed": "Starter",
+              "min_run": "Min. kørsel slutter",
+              "sensor_loss": "Pause pga. sensor"
+            }
+          }
+        }
+      },
+      "countdown_manual_override": {
+        "name": "Manuel overstyring slutter"
+      },
+      "countdown_opening_reduce": {
+        "name": "Dør/vindue: skrues ned"
+      },
+      "countdown_opening_off": {
+        "name": "Dør/vindue: slukker"
+      },
+      "countdown_opening_resume": {
+        "name": "Dør/vindue: genoptager"
+      },
+      "countdown_start_allowed": {
+        "name": "Start tilladt"
+      },
+      "countdown_min_run": {
+        "name": "Min. kørsel slutter"
+      },
+      "countdown_sensor_loss": {
+        "name": "Sensor væk: pause"
+      },
+      "room_temperature": {
+        "name": "Rumtemperatur"
+      },
+      "room_humidity": {
+        "name": "Rumfugtighed"
+      },
+      "outdoor_temperature": {
+        "name": "Udetemperatur"
+      },
+      "unit_temperature": {
+        "name": "Anlæggets føler"
+      },
+      "cop": {
+        "name": "COP"
+      },
+      "heat_output": {
+        "name": "Varmeeffekt"
+      },
+      "heat_price": {
+        "name": "Varmepris"
+      },
+      "cost_per_hour": {
+        "name": "Pris pr. time"
+      },
+      "filter_hours": {
+        "name": "Timer siden filterrens"
+      },
+      "power": {
+        "name": "Elforbrug"
+      },
+      "energy": {
+        "name": "Energi"
+      },
+      "energy_today": {
+        "name": "Energi i dag"
+      },
+      "energy_month": {
+        "name": "Energi denne måned"
+      },
+      "cost_today": {
+        "name": "Pris i dag"
+      },
+      "cost_month": {
+        "name": "Pris denne måned"
+      },
+      "runtime_today": {
+        "name": "Driftstid i dag"
+      },
+      "starts_today": {
+        "name": "Starter i dag"
+      },
+      "defrosts_today": {
+        "name": "Afrimninger i dag"
+      },
+      "supply_temperature": {
+        "name": "Udblæsning"
+      },
+      "return_temperature": {
+        "name": "Indsugning"
+      },
+      "measured_heat_output": {
+        "name": "Varmeeffekt (målt)"
+      },
+      "measured_cop": {
+        "name": "COP (målt)"
+      },
+      "price_level": {
+        "name": "Prisniveau",
+        "state": {
+          "off": "Fra",
+          "unknown": "Ingen prognose",
+          "cheap": "Billig",
+          "normal": "Normal",
+          "expensive": "Dyr"
+        }
+      },
+      "wake_status": {
+        "name": "Vækning",
+        "state": {
+          "off": "Fra",
+          "busy": "Genstarter",
+          "not_running": "Varmer ikke",
+          "unit_not_on": "Anlæg ikke tændt",
+          "defrosting": "Afrimer",
+          "no_data": "Ingen data",
+          "on_target": "På mål",
+          "working": "Arbejder",
+          "stalled": "Slumrer – vækkes"
+        }
+      },
+      "esp_status": {
+        "name": "ESP32-status",
+        "state": {
+          "online": "Forbundet",
+          "unit_silent": "Anlægget svarer ikke",
+          "update": "Ny firmware klar",
+          "offline": "Ikke forbundet"
+        },
+        "state_attributes": {
+          "firmware": {
+            "name": "Firmware"
+          },
+          "newest_firmware": {
+            "name": "Nyeste firmware"
+          },
+          "firmware_up_to_date": {
+            "name": "Firmware er nyeste"
+          },
+          "esphome": {
+            "name": "ESPHome"
+          },
+          "ip": {
+            "name": "IP-adresse"
+          },
+          "mac": {
+            "name": "MAC"
+          },
+          "wifi_signal": {
+            "name": "WiFi-signal (dBm)"
+          },
+          "uptime_hours": {
+            "name": "Oppetid (t)"
+          },
+          "unit_responding": {
+            "name": "Anlægget svarer"
+          },
+          "model": {
+            "name": "Model"
+          },
+          "name": {
+            "name": "Navn"
+          }
+        }
+      },
+      "esp_wifi_signal": {
+        "name": "ESP32 WiFi-signal"
+      },
+      "esp_uptime": {
+        "name": "ESP32 oppetid"
+      },
+      "esp_ip_address": {
+        "name": "ESP32 IP-adresse"
+      },
+      "esp_esphome_version": {
+        "name": "ESP32 ESPHome-version"
+      },
+      "follow_me_learning": {
+        "name": "Follow Me-indlæring",
+        "state": {
+          "off": "Slået fra",
+          "no_meter": "Mangler effektmåler",
+          "paused": "På pause",
+          "learning": "Indlærer",
+          "learned": "Indlært",
+          "checking_stop": "Tjekker stop",
+          "checking_hold": "Tjekker hold",
+          "checking_start": "Tjekker start",
+          "no_follow_me": "Follow Me når ikke frem"
+        }
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "status": {
+            "name": "Status",
+            "state": {
+              "off": "Slukket",
+              "manual": "Manuel overstyring",
+              "opening_off": "Slukket – dør/vindue åben",
+              "opening_reduced": "Skruet ned – dør/vindue åben",
+              "opening_resume_wait": "Venter på at genoptage",
+              "opening_reduce_wait": "Dør/vindue åben",
+              "sensor_lost": "Sensor væk",
+              "start_wait": "Venter på start",
+              "heating": "Varmer",
+              "cooling": "Køler",
+              "drying": "Affugter",
+              "fan_only": "Kun blæser",
+              "idle": "Tomgang"
+            }
+          },
+          "next_event": {
+            "name": "Næste hændelse",
+            "state": {
+              "manual_override": "Manuel overstyring slutter",
+              "opening_reduce": "Skrues ned",
+              "opening_off": "Slukker",
+              "opening_resume": "Genoptager",
+              "start_allowed": "Starter",
+              "min_run": "Min. kørsel slutter",
+              "sensor_loss": "Pause pga. sensor"
+            }
+          },
+          "next_change_timestamp": {
+            "name": "Næste skift"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "heating": {
+        "name": "Varmer"
+      },
+      "cooling": {
+        "name": "Køler"
+      },
+      "unit_online": {
+        "name": "Anlæg svarer"
+      },
+      "opening": {
+        "name": "Dør/vindue åben"
+      },
+      "no_power": {
+        "name": "Kører uden effekt"
+      },
+      "defrosting": {
+        "name": "Afrimer"
+      },
+      "esp_connected": {
+        "name": "ESP32 forbundet"
+      }
+    },
+    "switch": {
+      "follow_me": {
+        "name": "Follow Me"
+      },
+      "beep": {
+        "name": "Bip"
+      },
+      "mains": {
+        "name": "Strøm til anlæg"
+      },
+      "openings_enabled": {
+        "name": "Reagér på døre og vinduer"
+      },
+      "price_control": {
+        "name": "Prisstyring"
+      },
+      "auto_wake": {
+        "name": "Vækning ved slumring"
+      },
+      "turbo": {
+        "name": "Turbo 30 min"
+      }
+    },
+    "number": {
+      "opening_reduce_after": {
+        "name": "Dør/vindue: skru ned efter"
+      },
+      "opening_off_after": {
+        "name": "Dør/vindue: sluk efter"
+      },
+      "opening_resume_after": {
+        "name": "Dør/vindue: genoptag efter lukket"
+      },
+      "price_cheap_offset": {
+        "name": "Pris: op når billigt"
+      },
+      "price_expensive_offset": {
+        "name": "Pris: ned når dyrt"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
+      }
+    }
+  },
+  "selector": {
+    "model": {
+      "options": {
+        "s5225": "Qlima S 5225 / SC 5225",
+        "s5232": "Qlima S 5232 / SC 5232",
+        "custom": "Andet Midea-anlæg"
+      }
+    },
+    "temperature_mode": {
+      "options": {
+        "mean": "Gennemsnit",
+        "min": "Koldeste",
+        "max": "Varmeste",
+        "weighted": "Vægtet (%)"
+      }
+    },
+    "opening_reduce_to": {
+      "options": {
+        "setpoint": "Målet (holder rummet)",
+        "minimum": "Minimum (17 °C)"
+      }
+    },
+    "price_resolution": {
+      "options": {
+        "auto": "Auto",
+        "quarter": "Kvarter",
+        "hour": "Time"
+      }
+    },
+    "regulation": {
+      "options": {
+        "unit": "Anlægget holder målet (Follow Me)",
+        "thermostat": "Termostaten (hysterese, pause på minimum)"
+      }
+    }
+  },
+  "issues": {
+    "old_firmware": {
+      "title": "{name}: ESP-firmwaren er for gammel",
+      "description": "ESP'en i {name} mangler funktionen set_room_temperature, så Follow Me får ingen rumtemperatur. Opdatér firmwaren (web-installeren eller ESPHome)."
+    },
+    "missing_sensors": {
+      "title": "{name}: rumfølere findes ikke",
+      "description": "Disse rumfølere findes ikke: {sensors}. Vælg nye under Konfigurer → Rumfølere."
+    },
+    "no_esp": {
+      "title": "{name}: ESP'en i anlægget blev ikke fundet",
+      "description": "Klimaenheden fra den valgte ESP mangler. Tjek at ESP'en er online og tilføjet i ESPHome, eller vælg den igen under Konfigurer → Anlæg."
+    }
+  },
+  "exceptions": {
+    "turbo_not_running": {
+      "message": "Turbo virker kun, mens anlægget varmer eller køler."
+    },
+    "turbo_no_boost": {
+      "message": "Anlægget har ikke et boost-program."
+    },
+    "preset_not_in_mode": {
+      "message": "Anlægget tager ikke imod “{preset}” i tilstanden {mode}."
+    },
+    "preset_not_accepted": {
+      "message": "Anlægget tog ikke imod “{preset}”."
+    },
+    "install_own_yaml": {
+      "message": "Det kan ikke bekræftes, at denne ESP kører fabriksimaget, og ESPHome Builder kender den ikke. Er den adopteret i ESPHome, så opdatér den i ESPHome Builder (eller slå enhedens ESPHome-opdatering til, så kan den installeres herfra). Ellers flash det nyeste fabriksimage med webinstalleren – uden at slette."
+    }
+  }
+}

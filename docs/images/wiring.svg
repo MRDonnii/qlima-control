@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" font-family="Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f1c2c"/><stop offset="1" stop-color="#08111b"/></linearGradient>
+    <linearGradient id="pcb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d3a5a"/><stop offset="1" stop-color="#122a44"/></linearGradient>
+    <style>
+      .t{fill:#e6eef7;font-size:16px;font-weight:700}
+      .s{fill:#8fa2b6;font-size:13px}
+      .h{fill:#e6eef7;font-size:24px;font-weight:800}
+      .pin{fill:#e6eef7;font-size:14px;font-weight:700}
+      .w{fill:none;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
+      .box{fill:#121f30;stroke:#2b4058;stroke-width:1.5}
+    </style>
+  </defs>
+  <rect width="1200" height="780" rx="26" fill="url(#bg)"/>
+  <text x="44" y="56" class="h">Qlima Control – ledningsføring</text>
+  <text x="44" y="84" class="s">ESP32-C3 SuperMini i anlæggets USB-port · IR-diode til Follow Me, vip og display · valgfri DS18B20 til målt COP</text>
+
+  <!-- USB-A plug -->
+  <g transform="translate(44,230)">
+    <rect width="200" height="230" rx="16" class="box"/>
+    <text x="100" y="32" text-anchor="middle" class="t">USB-A han-stik</text>
+    <text x="100" y="52" text-anchor="middle" class="s">sættes i anlæggets port</text>
+    <rect x="40" y="70" width="120" height="46" rx="6" fill="#9aa7b4"/>
+    <g fill="#d4a017"><rect x="52" y="80" width="16" height="26"/><rect x="78" y="80" width="14" height="26"/><rect x="104" y="80" width="14" height="26"/><rect x="130" y="80" width="16" height="26"/></g>
+    <text x="100" y="140" text-anchor="middle" class="s">set forfra, plastik nedad:</text>
+    <text x="100" y="158" text-anchor="middle" class="s">5V · D− · D+ · GND</text>
+    <text x="100" y="196" text-anchor="middle" class="s">Kabelfarver passer ikke altid –</text>
+    <text x="100" y="214" text-anchor="middle" class="s">mål efter med et multimeter</text>
+  </g>
+
+  <!-- ESP32-C3 -->
+  <g transform="translate(560,190)">
+    <rect width="220" height="330" rx="16" fill="url(#pcb)" stroke="#3d6a96" stroke-width="2"/>
+    <rect x="72" y="-16" width="76" height="32" rx="8" fill="#9aa7b4"/>
+    <text x="110" y="5" text-anchor="middle" font-size="12" font-weight="800" fill="#1b2633">USB-C</text>
+    <rect x="55" y="40" width="110" height="70" rx="8" fill="#0d1a29" stroke="#3d6a96"/>
+    <text x="110" y="72" text-anchor="middle" class="t">ESP32-C3</text>
+    <text x="110" y="92" text-anchor="middle" class="s">SuperMini</text>
+    <g class="pin">
+      <circle cx="0" cy="110" r="8" fill="#e5484d"/><text x="18" y="115">5V</text>
+      <circle cx="0" cy="170" r="8" fill="#22c55e"/><text x="18" y="175">GPIO6 (TX)</text>
+      <circle cx="0" cy="230" r="8" fill="#e2e8f0"/><text x="18" y="235">GPIO7 (RX)</text>
+      <circle cx="0" cy="290" r="8" fill="#64748b"/><text x="18" y="295">GND</text>
+    </g>
+    <g class="pin" text-anchor="end">
+      <circle cx="220" cy="110" r="8" fill="#c084fc"/><text x="202" y="115">GPIO10</text>
+      <circle cx="220" cy="170" r="8" fill="#38bdf8"/><text x="202" y="175">GPIO5</text>
+      <circle cx="220" cy="230" r="8" fill="#38bdf8"/><text x="202" y="235">GPIO4</text>
+      <circle cx="220" cy="290" r="8" fill="#fb923c"/><text x="202" y="295">3V3</text>
+    </g>
+  </g>
+
+  <!-- USB wires: straight lines -->
+  <path class="w" stroke="#e5484d" d="M244 300 H552"/>
+  <path class="w" stroke="#22c55e" d="M244 360 H552"/>
+  <path class="w" stroke="#e2e8f0" d="M244 420 H552"/>
+  <path class="w" stroke="#64748b" d="M244 480 V500 H530 V480 H552"/>
+  <g class="s">
+    <text x="262" y="290" fill="#fca5a5">Rød · 5V</text>
+    <text x="262" y="350" fill="#86efac">Grøn · D+ = anlæggets RX</text>
+    <text x="262" y="410" fill="#e2e8f0">Hvid · D− = anlæggets TX</text>
+    <text x="262" y="522" fill="#cbd5e1">Sort · GND</text>
+  </g>
+
+  <!-- 4.7k pull-up between red (y300) and green (y360) -->
+  <g transform="translate(470,300)">
+    <circle cx="0" cy="0" r="6" fill="#e6eef7"/>
+    <circle cx="0" cy="60" r="6" fill="#e6eef7"/>
+    <rect x="-13" y="9" width="26" height="42" rx="6" fill="#d9c7a3" stroke="#8a7350"/>
+    <rect x="-13" y="16" width="26" height="5" fill="#f5c542"/>
+    <rect x="-13" y="25" width="26" height="5" fill="#8b5cf6"/>
+    <rect x="-13" y="34" width="26" height="5" fill="#e5484d"/>
+    <rect x="-13" y="44" width="26" height="4" fill="#c9a227"/>
+  </g>
+  <g transform="translate(380,232)">
+    <rect x="0" y="0" width="170" height="44" rx="10" fill="#1a2433" stroke="#3a4b60"/>
+    <text x="12" y="19" class="t" font-size="14">4,7 kΩ pull-up</text>
+    <text x="12" y="36" class="s" font-size="12">grøn → 5V (gul-violet-rød)</text>
+  </g>
+
+  <!-- IR LED box -->
+  <g transform="translate(850,140)">
+    <rect width="310" height="150" rx="16" class="box"/>
+    <text x="18" y="32" class="t">IR-diode 940 nm</text>
+    <text x="18" y="52" class="s">få mm fra anlæggets IR-modtager</text>
+    <rect x="18" y="74" width="54" height="22" rx="6" fill="#d9c7a3" stroke="#8a7350"/>
+    <text x="80" y="91" class="s">470 Ω i serie</text>
+    <ellipse cx="250" cy="82" rx="18" ry="22" fill="#6d5ba8"/><rect x="232" y="82" width="36" height="16" fill="#6d5ba8"/>
+    <path d="M276 66 l16 -9 M279 82 l18 0 M276 98 l16 9" stroke="#c084fc" stroke-width="3" stroke-linecap="round"/>
+    <text x="18" y="124" class="s">Langt ben (+) → 470 Ω → GPIO10</text>
+    <text x="18" y="142" class="s">Kort ben (−) → GND</text>
+  </g>
+  <path class="w" stroke="#c084fc" d="M780 300 H815 V215 H850"/>
+
+  <!-- DS18B20 box -->
+  <g transform="translate(850,330)">
+    <rect width="310" height="230" rx="16" class="box"/>
+    <text x="18" y="32" class="t">2 × DS18B20 (valgfri)</text>
+    <text x="18" y="52" class="s">målt varmeeffekt og COP</text>
+    <g transform="translate(18,62)">
+      <path d="M0 26 a22 22 0 0 1 44 0 v18 h-44z" fill="#222c38" stroke="#4b5c70"/>
+      <text x="58" y="20" class="t" font-size="14">GPIO5 · udblæsning</text>
+      <text x="58" y="38" class="s" font-size="12">i luftstrømmen under lamellerne</text>
+    </g>
+    <g transform="translate(18,118)">
+      <path d="M0 26 a22 22 0 0 1 44 0 v18 h-44z" fill="#222c38" stroke="#4b5c70"/>
+      <text x="58" y="20" class="t" font-size="14">GPIO4 · indsugning</text>
+      <text x="58" y="38" class="s" font-size="12">bag filteret i toppen</text>
+    </g>
+    <text x="18" y="196" class="s">Rød → 3V3 · sort → GND · gul → GPIO</text>
+    <text x="18" y="216" class="s">4,7 kΩ fra gul (data) til 3V3 – én pr. føler</text>
+  </g>
+  <path class="w" stroke="#38bdf8" d="M780 360 H815 V412 H850"/>
+  <path class="w" stroke="#38bdf8" d="M780 420 H805 V468 H850"/>
+  <path class="w" stroke="#fb923c" d="M780 480 H795 V580 H1005 V560"/>
+  <text x="815" y="600" class="s" fill="#fdba74">3V3 til følerne</text>
+
+  <!-- notes -->
+  <g transform="translate(44,630)">
+    <rect width="1116" height="118" rx="16" fill="#1a1410" stroke="#5c3d1e"/>
+    <text x="22" y="34" class="t" fill="#fbbf24">Vigtigt</text>
+    <text x="22" y="60" class="s">• Sæt aldrig ESP'ens USB-C i en computer, mens den sidder i anlægget – den får så 5 V fra to sider. Flash den først, sæt den i bagefter.</text>
+    <text x="22" y="82" class="s">• Sluk anlægget på strømmen før indedelen åbnes – hovedprintet har 230 V. Uden 4,7 kΩ fra grøn til 5V svarer anlægget ikke.</text>
+    <text x="22" y="104" class="s">• Byttes D− og D+, sker der intet – anlægget svarer bare ikke. Byt dem så. Følerne bliver opdaget af sig selv, når de er loddet på.</text>
+  </g>
+</svg>
