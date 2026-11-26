@@ -76,7 +76,10 @@
               "hold_early": "Skru ned så meget før målet",
               "stop_margin": "Stop, når rummet er så meget over målet",
               "fan_low_when_idle": "Laveste blæser, når anlægget ikke varmer",
-              "fan_idle_power_w": "Blæseren kører over (W)"
+              "fan_idle_power_w": "Blæseren kører over (W)",
+              "night_quiet": "Stille om natten",
+              "night_start": "Stille fra",
+              "night_end": "Stille til"
             },
             "data_description": {
               "setpoint_compensation": "Ikke nødvendig med Follow Me.",
@@ -85,7 +88,8 @@
               "hold_early": "Rummet bliver ved med at stige lidt, når anlægget skruer ned. Derfor skrues der ned lidt før målet.",
               "stop_margin": "Bliver rummet alligevel for varmt, får anlægget besked på at stoppe.",
               "fan_low_when_idle": "Når anlægget ikke varmer, kører blæseren ellers videre og blæser kold luft. Din egen blæserindstilling kommer tilbage, når det varmer igen.",
-              "fan_idle_power_w": "0 = automatisk (lidt over det, anlægget bruger, når det er slukket)."
+              "fan_idle_power_w": "0 = automatisk (lidt over det, anlægget bruger, når det er slukket).",
+              "night_quiet": "Blæseren kører på det mest stille trin (Silent, hvis anlægget har det), mens anlægget kører i tidsrummet. Det varmer lidt langsommere. Vælger du selv en blæser om natten, beholdes den til tidsrummet slutter."
             }
           },
           "notifications": {
@@ -213,7 +217,10 @@
           "hold_early": "Skru ned så meget før målet",
           "stop_margin": "Stop, når rummet er så meget over målet",
           "fan_low_when_idle": "Laveste blæser, når anlægget ikke varmer",
-          "fan_idle_power_w": "Blæseren kører over (W)"
+          "fan_idle_power_w": "Blæseren kører over (W)",
+          "night_quiet": "Stille om natten",
+          "night_start": "Stille fra",
+          "night_end": "Stille til"
         },
         "data_description": {
           "regulation": "Anlægget: det får rumtemperaturen som Follow Me og holder selv målet (ingen tænd/sluk, ingen pause på 17 °C). Termostaten: tænd/sluk med hysterese og pause på laveste mål. Anlægget bruger termostaten, mens Follow Me er slået fra.",
@@ -223,7 +230,8 @@
           "hold_early": "Rummet bliver ved med at stige lidt, når anlægget skruer ned. Derfor skrues der ned lidt før målet.",
           "stop_margin": "Bliver rummet alligevel for varmt, får anlægget besked på at stoppe.",
           "fan_low_when_idle": "Når anlægget ikke varmer, kører blæseren ellers videre og blæser kold luft. Din egen blæserindstilling kommer tilbage, når det varmer igen.",
-          "fan_idle_power_w": "0 = automatisk (lidt over det, anlægget bruger, når det er slukket)."
+          "fan_idle_power_w": "0 = automatisk (lidt over det, anlægget bruger, når det er slukket).",
+          "night_quiet": "Blæseren kører på det mest stille trin (Silent, hvis anlægget har det), mens anlægget kører i tidsrummet. Det varmer lidt langsommere. Vælger du selv en blæser om natten, beholdes den til tidsrummet slutter."
         }
       },
       "notifications": {
@@ -528,6 +536,9 @@
           "checking_start": "Tjekker start",
           "no_follow_me": "Follow Me når ikke frem"
         }
+      },
+      "next_defrost": {
+        "name": "Næste afrimning om"
       }
     },
     "climate": {
@@ -590,6 +601,9 @@
       },
       "esp_connected": {
         "name": "ESP32 forbundet"
+      },
+      "cold_air": {
+        "name": "Kold luft fra anlægget"
       }
     },
     "switch": {
@@ -616,6 +630,9 @@
       },
       "fan_low_when_idle": {
         "name": "Laveste blæser, når den ikke varmer"
+      },
+      "night_quiet": {
+        "name": "Stille om natten"
       }
     },
     "number": {

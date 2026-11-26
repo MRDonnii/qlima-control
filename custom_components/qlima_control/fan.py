@@ -9,6 +9,12 @@ choice is kept and set back once the compressor has run again for FAN_RESUME sec
 During a real defrost the unit stops the fan itself (standby power): nothing is sent then.
 A fan speed somebody else chooses while it is lowered (remote, app, card) is theirs: it is
 left alone until the compressor has run again.
+
+1.12: with the outlet sensor (DS18B20 "Udblæsningstemperatur") fitted, air that leaves the
+unit less than COLD_K warmer than the room for FAN_IDLE seconds counts too – also without a
+power meter. "Stille om natten" keeps the quietest speed (Silent when the unit has it) in a
+chosen time window while the unit heats or cools; a speed chosen in that window is kept until
+it ends.
 """
 
 from __future__ import annotations
@@ -21,6 +27,8 @@ FAN_RESUME = 60         # s the compressor must run before the user's fan speed 
 STANDBY_DEFAULT_W = 6.0  # what a switched-off unit draws until it has been seen
 FAN_MARGIN_W = 4.0      # fan-only power is this much above standby
 LOW_NAMES = ("low", "silent", "quiet")
+QUIET_NAMES = ("silent", "quiet", "low")
+COLD_K = 3.0            # K: outlet air less than this above the room is not heating
 
 
 def lowest_fan(modes: list[str] | None) -> str | None:
@@ -34,10 +42,28 @@ def lowest_fan(modes: list[str] | None) -> str | None:
     return None
 
 
+def quietest_fan(modes: list[str] | None) -> str | None:
+    """The quietest speed (Silent first)."""
+    if not modes:
+        return None
+    by_lower = {str(m).lower(): m for m in modes}
+    for name in QUIET_NAMES:
+        if name in by_lower:
+            return by_lower[name]
+    return None
+
+
+def cold_air(mode: str | None, outlet: float | None, room: float | None) -> bool | None:
+    """In heat: the air leaving the unit is not warm (None without both readings)."""
+    if mode != "heat" or outlet is None or room is None:
+        return None
+    return outlet < room + COLD_K
+
+
 @dataclass
 class FanAction:
     fan_mode: str
-    why: str  # "lower" / "restore"
+    why: str  # "lower" / "night" / "restore"
 
 
 class FanGuard:
@@ -45,13 +71,20 @@ class FanGuard:
 
     def __init__(self) -> None:
         self.enabled = True
+        self.night_enabled = False
         self.power_w = 0.0            # fan-only threshold (W); 0 = standby + FAN_MARGIN_W
         self.saved: str | None = None  # the user's fan speed to set back
-        self.lowered = False
+        self.lowered_to: str | None = None  # the speed it was set to
         self.user_hold = False        # somebody chose a speed while it stood still
+        self.night_hold = False       # … or in the night window
         self.standby_w: float | None = None
         self._off_since: float | None = None
         self._on_since: float | None = None
+        self._cold_since: float | None = None
+
+    @property
+    def lowered(self) -> bool:
+        return self.lowered_to is not None
 
     # ------------------------------------------------------------ inputs
     def threshold(self) -> float:
@@ -65,22 +98,27 @@ class FanGuard:
             return
         self.standby_w = power if self.standby_w is None else round(self.standby_w + (power - self.standby_w) * 0.1, 2)
 
-    def remember(self, fan: str | None, low: str | None) -> None:
+    def remember(self, fan: str | None, low: str | None = None) -> None:
         """Keep the user's fan speed (e.g. before the unit is switched off for an open door)."""
-        if fan and not self.lowered and fan != low and self.saved is None:
+        if fan and not self.lowered and self.saved is None:
             self.saved = fan
 
-    def user_choice(self, fan: str) -> None:
+    def user_choice(self, fan: str, night: bool = False) -> None:
         """Somebody chose a speed through the thermostat: that is the speed from now on."""
         self.saved = None
-        if self.lowered or (self._off_since is not None):
+        if night and self.night_enabled:
+            self.night_hold = True
+        elif self.lowered or self._off_since is not None:
             self.user_hold = True
-        self.lowered = False
+        self.lowered_to = None
+
+    def cold_air_active(self, now: float) -> bool:
+        return self._cold_since is not None and now - self._cold_since >= FAN_IDLE
 
     # ------------------------------------------------------------ decision
     def decide(self, now: float, *, mode: str | None, fan: str | None, modes: list[str] | None,
-               compressor: bool | None, power: float | None, told_to_stop: bool) -> FanAction | None:
-        low = lowest_fan(modes)
+               compressor: bool | None, power: float | None, told_to_stop: bool,
+               night: bool = False, cold: bool | None = None) -> FanAction | None:
         if compressor is True:
             self._off_since = None
             if self._on_since is None:
@@ -89,37 +127,64 @@ class FanGuard:
             self._on_since = None
             if self._off_since is None:
                 self._off_since = now
+        if cold:
+            if self._cold_since is None:
+                self._cold_since = now
+        else:
+            self._cold_since = None
+        if not night:
+            self.night_hold = False
         if mode not in ("heat", "cool"):
             # Off (or dry/fan only): never send a fan command, it could switch the unit on.
-            self._off_since = self._on_since = None
+            self._off_since = self._on_since = self._cold_since = None
             return None
-        if self.lowered and fan is not None and fan != low:
+        if self.lowered and fan is not None and fan != self.lowered_to:
             # Somebody else chose a speed while it was lowered: theirs.
-            self.lowered, self.saved, self.user_hold = False, None, True
+            self.lowered_to, self.saved = None, None
+            if night and self.night_enabled:
+                self.night_hold = True
+            else:
+                self.user_hold = True
             return None
-        # Without a compressor or power reading it cannot be lowered, and a kept speed comes back at once.
-        running = compressor is None or (self._on_since is not None and now - self._on_since >= FAN_RESUME)
+        if compressor is None:
+            # No compressor reading: the outlet air tells (warm again = heating); without it a
+            # kept speed comes back at once and nothing is lowered.
+            running = cold is not True
+        else:
+            running = self._on_since is not None and now - self._on_since >= FAN_RESUME
         if running:
             self.user_hold = False
-        if self.saved is not None and (running or mode != "heat" or not self.enabled):
-            saved, self.saved, self.lowered = self.saved, None, False
+        low = lowest_fan(modes)
+        want, why = None, "lower"
+        if self.night_enabled and night and not self.night_hold:
+            want, why = quietest_fan(modes), "night"
+        if want is None and self.enabled and mode == "heat" and low is not None and not self.user_hold:
+            idle = self._off_since is not None and now - self._off_since >= FAN_IDLE
+            blowing = told_to_stop or (power is not None and power >= self.threshold())
+            cold_long = self.cold_air_active(now) and compressor is not True
+            if (idle and blowing) or cold_long or (self.lowered_to == low and not running):
+                want = low
+        if want is not None:
+            if fan is None or fan == want:
+                return None
+            if self.saved is None and not self.lowered:
+                self.saved = fan
+            self.lowered_to = want
+            return FanAction(want, why)
+        self.lowered_to = None
+        if self.saved is not None:
+            saved, self.saved = self.saved, None
             return FanAction(saved, "restore") if fan != saved else None
-        if self.lowered or not self.enabled or mode != "heat" or low is None or self.user_hold:
-            return None
-        idle = self._off_since is not None and now - self._off_since >= FAN_IDLE
-        blowing = told_to_stop or (power is not None and power >= self.threshold())
-        if idle and blowing and fan is not None and fan != low:
-            self.saved, self.lowered = fan, True
-            return FanAction(low, "lower")
         return None
 
     # ------------------------------------------------------------ state
     def attributes(self) -> dict[str, Any]:
-        return {"fan_lowered": self.lowered, "fan_user_choice": self.saved,
+        return {"fan_lowered": self.lowered, "fan_lowered_to": self.lowered_to, "fan_user_choice": self.saved,
                 "fan_standby_w": self.standby_w, "fan_idle_threshold_w": round(self.threshold(), 1)}
 
     def restore(self, attrs: dict[str, Any]) -> None:
-        self.lowered = bool(attrs.get("fan_lowered", False))
+        lowered_to = attrs.get("fan_lowered_to") or ("low" if attrs.get("fan_lowered") else None)
+        self.lowered_to = str(lowered_to) if lowered_to else None
         saved = attrs.get("fan_user_choice")
         self.saved = str(saved) if saved else None
         try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import math
 from time import time
 from typing import Any
 
@@ -23,6 +24,8 @@ _DEFROST_LOW_W = 120
 _DEFROST_RUN_W = 300
 _STARTUP_GRACE = 10 * 60  # s after a start whose dips are the soft start, not defrosts
 _DEFROST_MAX = 15 * 60    # s: a longer drop is a stop
+_DEFROST_MIN_INTERVAL = 10   # heating minutes between defrosts that count for the forecast
+_DEFROST_MAX_INTERVAL = 600
 
 
 class QlimaStats:
@@ -112,6 +115,8 @@ class QlimaStats:
         running = self.unit.running("heat") or self.unit.running("cool")
         if running and 0 < dt < 600:
             self.data["runtime_day"] = self.data.get("runtime_day", 0.0) + dt / 3600
+            if mode == "heat":
+                self.data["defrost_heat_min"] = self.data.get("defrost_heat_min", 0.0) + dt / 60
         if running and not self._running:
             self.data["starts_day"] = self.data.get("starts_day", 0) + 1
         self._running = running
@@ -131,7 +136,7 @@ class QlimaStats:
         if own is not None:
             # The unit reports its defrost itself (service data): count each start.
             if own and not self.defrosting:
-                self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
+                self._count_defrost()
             self.defrosting = own
             return
         power, outdoor = self.unit.power(), self.unit.outdoor()
@@ -156,7 +161,7 @@ class QlimaStats:
             if self.defrosting:
                 self.defrosting = False
                 if self._dip_at is not None and now - self._dip_at <= _DEFROST_MAX and not self._dip_pushed:
-                    self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
+                    self._count_defrost()
             self._dip_at = None
             return
         if power < _DEFROST_LOW_W and recently_running and not self.defrosting:
@@ -167,6 +172,32 @@ class QlimaStats:
             self.defrosting, self._dip_at = False, None  # too long for a defrost: it was a stop
         elif not recently_running and now - self._was_running_at_speed > 900:
             self.defrosting, self._dip_at = False, None
+
+    def _count_defrost(self) -> None:
+        """One defrost: counted, and the heating minutes since the last one learned for this
+        outdoor band (1.12, for the forecast)."""
+        self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
+        minutes, outdoor = self.data.get("defrost_heat_min", 0.0), self.unit.outdoor()
+        if outdoor is not None and _DEFROST_MIN_INTERVAL <= minutes <= _DEFROST_MAX_INTERVAL:
+            band = str(int(math.floor(outdoor / 5) * 5))
+            intervals = self.data.setdefault("defrost_interval", {})
+            old = intervals.get(band)
+            intervals[band] = round(minutes if old is None else old + (minutes - old) * 0.3, 1)
+        self.data["defrost_heat_min"] = 0.0
+        self.data["last_defrost"] = dt_util.utcnow().isoformat(timespec="seconds")
+
+    def defrost_forecast(self) -> dict[str, Any]:
+        """Heating minutes until the next defrost is expected, from what this band has shown."""
+        outdoor = self.unit.outdoor()
+        band = None if outdoor is None else str(int(math.floor(outdoor / 5) * 5))
+        interval = (self.data.get("defrost_interval") or {}).get(band) if band is not None else None
+        since = round(self.data.get("defrost_heat_min", 0.0))
+        minutes = None
+        if interval is not None and outdoor is not None and outdoor <= _DEFROST_MAX_OUTDOOR:
+            minutes = max(0, round(interval - since))
+        return {"minutes": minutes, "interval_min": interval, "heating_since_min": since,
+                "last_defrost": self.data.get("last_defrost"), "outdoor_band": band,
+                "intervals": dict(self.data.get("defrost_interval") or {})}
 
     # --- values ------------------------------------------------------------
     def value(self, key: str) -> float | int | None:

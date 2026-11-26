@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.0 (firmware 1.4.5)
+Change by Claude AI – a unit that is on runs better. Nothing here switches a unit on or off, or between heat pump and district heating.
+- **Quiet at night** (new setting and switch *Stille om natten*, off by default; window *Stille fra*/*Stille til*, default 22:00–07:00, may run past midnight). While the unit heats or cools in the window its fan stays on the quietest step (Silent when the unit has it, else low). The user's own speed comes back when the window ends. A speed somebody chooses in the window is kept until it ends.
+- **Cold air measured with the outlet sensor.** With the DS18B20 *Udblæsningstemperatur* fitted, new binary sensor *Kold luft fra anlægget*: in heat the air leaving the unit has been less than 3 K warmer than the room for 2 min. The fan guard of 1.11 uses it too, so it also works without a power meter, and the fan speed comes back once the air is warm again.
+- **Next defrost** (new sensor *Næste afrimning om*, heating minutes): the heating time between defrosts is learned per 5 °C outdoor band (10–600 min, averaged); attributes show the interval, heating since the last defrost and when it was.
+- Tests for quiet night, cold outlet air and the defrost forecast.
+
 ## 1.11.0 (firmware 1.4.5)
 Change by Claude AI – no cold air when the unit stops (analysis of the garage on 2026-11-26).
 - **Hold keeps the compressor on its lowest step.** At the target Follow Me now tells the unit the room is at most *hold offset* (new setting, default 1 °C) warmer than its own target – instead of the learned stop level − 1, which was 2–3 °C on the garage and made the compressor stop after 3–6 min anyway (about 10 min of unheated air every 45 min, the room swinging 1.1 K). The inverter turns down instead of stopping.

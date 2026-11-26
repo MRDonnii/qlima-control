@@ -25,7 +25,9 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import learning_notice
-from .fan import FanGuard, lowest_fan
+from homeassistant.util import dt as dt_util
+
+from .fan import FanGuard, cold_air, lowest_fan
 from .followme import FollowMe, Steering
 from .const import (
     AWAY_STATES,
@@ -56,6 +58,11 @@ from .const import (
     COUNTDOWN_START_ALLOWED,
     COUNTDOWNS,
     CONF_FAN_IDLE_POWER_W,
+    CONF_NIGHT_END,
+    CONF_NIGHT_QUIET,
+    CONF_NIGHT_START,
+    DEFAULT_NIGHT_END,
+    DEFAULT_NIGHT_START,
     CONF_FAN_LOW_IDLE,
     CONF_HOLD_EARLY,
     CONF_HOLD_OFFSET,
@@ -118,6 +125,15 @@ _SWING_HORIZONTAL = getattr(ClimateEntityFeature, "SWING_HORIZONTAL_MODE", None)
 def _whole(value: Any) -> float:
     """Round to a whole degree, halves up (the heat pumps only take whole degrees)."""
     return float(math.floor(float(value) + 0.5))
+
+
+def _minutes(value: Any, fallback: int) -> int:
+    """'22:00' / '22:00:00' → minutes after midnight."""
+    try:
+        hours, minutes = str(value).split(":")[:2]
+        return (int(hours) * 60 + int(minutes)) % (24 * 60)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _half(value: Any) -> float:
@@ -263,6 +279,9 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._fm.stop_margin = float(cfg.get(CONF_STOP_MARGIN, DEFAULT_STOP_MARGIN))
         self._fan.enabled = bool(cfg.get(CONF_FAN_LOW_IDLE, DEFAULT_FAN_LOW_IDLE))
         self._fan.power_w = float(cfg.get(CONF_FAN_IDLE_POWER_W, DEFAULT_FAN_IDLE_POWER_W) or 0)
+        self._fan.night_enabled = bool(cfg.get(CONF_NIGHT_QUIET, False))
+        self._night = (_minutes(cfg.get(CONF_NIGHT_START, DEFAULT_NIGHT_START), 22 * 60),
+                       _minutes(cfg.get(CONF_NIGHT_END, DEFAULT_NIGHT_END), 7 * 60))
 
     @property
     def hvac_mode(self):
@@ -344,8 +363,22 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         await self._pump_call(service, data)
         self.async_write_ha_state()
 
+    def is_night(self) -> bool:
+        """Inside the quiet-night window (local time; it may run past midnight)."""
+        now = dt_util.now()
+        minute, (start, end) = now.hour * 60 + now.minute, self._night
+        if start == end:
+            return False
+        return start <= minute < end if start < end else (minute >= start or minute < end)
+
+    def cold_air_now(self) -> bool | None:
+        """The outlet air has not been warm for a while while heating (None without the sensor)."""
+        if self.unit.supply_temperature() is None:
+            return None
+        return self._fan.cold_air_active(time())
+
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        self._fan.user_choice(fan_mode)
+        self._fan.user_choice(fan_mode, night=self._fan.night_enabled and self.is_night())
         await self._forward("set_fan_mode", {"fan_mode": fan_mode})
 
     async def _guard_fan(self) -> None:
@@ -359,11 +392,14 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             time(), mode=pump.state, fan=pump.attributes.get("fan_mode"),
             modes=pump.attributes.get("fan_modes"), compressor=self.unit.compressor_on(),
             power=self.unit.power(), told_to_stop=self.stop_requested() and self._hvac_mode != HVACMode.OFF,
+            night=self._fan.night_enabled and self.is_night(),
+            cold=cold_air(pump.state, self.unit.supply_temperature(), self.current_temperature),
         )
         if action is None:
             return
-        _LOGGER.info("%s: fan %s → %s", self.entry.title,
-                     "lowered while the compressor stands still" if action.why == "lower" else "set back", action.fan_mode)
+        _LOGGER.info("%s: fan %s → %s", self.entry.title, {
+            "lower": "lowered while the compressor stands still", "night": "quiet for the night"}.get(action.why, "set back"),
+            action.fan_mode)
         self._last_command_reason = f"fan_{action.why}"
         await self._forward("set_fan_mode", {"fan_mode": action.fan_mode})
 

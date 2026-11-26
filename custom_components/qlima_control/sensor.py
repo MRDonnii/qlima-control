@@ -34,6 +34,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities.append(PriceLevelSensor(hass, entry))
     if unit.power_switch:
         entities.append(WakeSensor(hass, entry))
+    if unit.power_sensor or unit.entity("defrost"):
+        entities.append(DefrostForecastSensor(hass, entry))
     stats = hass.data[DOMAIN][f"{entry.entry_id}_stats"]
     for key, field, kind, needs in _STATS:
         if needs(unit):
@@ -294,6 +296,34 @@ class WakeSensor(_ThermostatSensor):
         if wake is None:
             return None
         return {**wake.attributes(), "wakes_today": wake.wakes_today}
+
+
+class DefrostForecastSensor(QlimaEntity, SensorEntity):
+    """Heating minutes until the next defrost is expected (learned per 5 °C outdoor band)."""
+
+    _attr_icon = "mdi:snowflake-clock"
+    _attr_native_unit_of_measurement = "min"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "next_defrost")
+
+    @property
+    def _stats(self):
+        return self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_stats")
+
+    @property
+    def native_value(self):
+        stats = self._stats
+        return None if stats is None else stats.defrost_forecast()["minutes"]
+
+    @property
+    def extra_state_attributes(self):
+        stats = self._stats
+        if stats is None:
+            return {}
+        f = stats.defrost_forecast()
+        return {k: f[k] for k in ("interval_min", "heating_since_min", "last_defrost", "outdoor_band", "intervals")}
 
 
 class EspStatusSensor(QlimaEntity, SensorEntity):

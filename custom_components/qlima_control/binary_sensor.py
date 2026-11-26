@@ -27,6 +27,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     if unit.power_sensor:
         entities.append(NoPower(hass, entry))
         entities.append(Defrosting(hass, entry))
+    if unit.entity("supply_temp"):
+        entities.append(ColdAir(hass, entry))
     async_add_entities(entities)
 
 
@@ -128,3 +130,24 @@ class Defrosting(QlimaEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         stats = self.hass.data[DOMAIN].get(f"{self.entry.entry_id}_stats")
         return bool(stats and stats.defrosting)
+
+
+class ColdAir(QlimaEntity, BinarySensorEntity):
+    """In heat the air leaving the unit has been less than 3 K warmer than the room for 2 min
+    (the outlet sensor): the fan blows unheated air – the fan guard turns it down."""
+
+    _attr_device_class = BinarySensorDeviceClass.COLD
+    _attr_icon = "mdi:weather-windy"
+
+    def __init__(self, hass, entry) -> None:
+        super().__init__(hass, entry, "cold_air")
+
+    @property
+    def available(self) -> bool:
+        thermostat = self.thermostat
+        return thermostat is not None and thermostat.cold_air_now() is not None
+
+    @property
+    def is_on(self) -> bool:
+        thermostat = self.thermostat
+        return bool(thermostat is not None and thermostat.cold_air_now())

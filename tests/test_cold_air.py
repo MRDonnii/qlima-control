@@ -132,3 +132,62 @@ def test_defrost_count_skips_start_dips_and_own_stops():
         _minutes(stats, reading, clock, 14, 20)
         _minutes(stats, reading, clock, 900, 5)
         assert stats.data.get("defrosts_day") == 1
+
+
+# ---------------------------------------------------------------- 1.12
+
+
+def test_quiet_night_keeps_silent_and_gives_the_speed_back():
+    g = FanGuard()
+    g.night_enabled = True
+    action = _run(g, 0, night=True)
+    assert action.fan_mode == "SILENT" and action.why == "night" and g.saved == "auto"
+    assert _run(g, 600, fan="SILENT", night=True) is None  # kept while it runs
+    # The compressor stops at night: stays silent (not switched to low).
+    assert _run(g, 900, fan="SILENT", night=True, compressor=False, power=14.0) is None
+    assert _run(g, 900 + FAN_IDLE, fan="SILENT", night=True, compressor=False, power=14.0) is None
+    # Morning, heating: the user's speed back at once.
+    action = _run(g, 2000, fan="SILENT")
+    assert action.fan_mode == "auto" and not g.lowered
+    # A speed chosen at night is kept for the rest of the night.
+    g2 = FanGuard()
+    g2.night_enabled = True
+    _run(g2, 0, night=True)
+    assert _run(g2, 60, fan="high", night=True) is None and g2.night_hold
+    assert _run(g2, 120, fan="high", night=True) is None
+    assert _run(g2, 180, fan="high", night=False) is None and not g2.night_hold
+
+
+def test_cold_outlet_air_lowers_the_fan_without_a_power_meter():
+    from custom_components.qlima_control.fan import cold_air
+
+    assert cold_air("heat", 22.0, 21.0) is True and cold_air("heat", 30.0, 21.0) is False
+    assert cold_air("cool", 10.0, 21.0) is None and cold_air("heat", None, 21.0) is None
+    g = FanGuard()
+    assert _run(g, 0, compressor=None, power=None, cold=True) is None
+    action = _run(g, FAN_IDLE, compressor=None, power=None, cold=True)
+    assert action.fan_mode == "low" and g.cold_air_active(FAN_IDLE)
+    # Warm air again: the speed comes back.
+    assert _run(g, FAN_IDLE + 60, fan="low", compressor=None, power=None, cold=False).fan_mode == "auto"
+
+
+def test_defrost_forecast_is_learned_per_band():
+    clock, step = _Clock(), {"step": "hold"}
+    stats, reading = _stats(step)
+    assert stats.defrost_forecast()["minutes"] is None
+    with patch("custom_components.qlima_control.stats.time", clock), patch(
+        "custom_components.qlima_control.stats.dt_util"
+    ) as dt:
+        dt.utcnow.return_value.isoformat.return_value = "2026-11-26T12:00:00+00:00"
+        stats.data["defrost_heat_min"] = 50.0
+        stats._count_defrost()
+        assert stats.data["defrost_interval"] == {"0": 50.0} and stats.data["defrost_heat_min"] == 0
+        stats.data["defrost_heat_min"] = 20.0
+        f = stats.defrost_forecast()
+        assert f["minutes"] == 30 and f["interval_min"] == 50.0 and f["outdoor_band"] == "0"
+        stats.data["defrost_heat_min"] = 70.0
+        stats._count_defrost()
+        assert stats.data["defrost_interval"]["0"] == 56.0  # moves towards what it sees
+        stats.data["defrost_heat_min"] = 3.0  # a defrost straight after another: not learned
+        stats._count_defrost()
+        assert stats.data["defrost_interval"]["0"] == 56.0

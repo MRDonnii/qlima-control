@@ -36,6 +36,9 @@ LIVE_KEYS = frozenset({
     "stop_margin",
     "fan_low_when_idle",
     "fan_idle_power_w",
+    "night_quiet",
+    "night_start",
+    "night_end",
 })
 # Follow Me hold and the fan while the compressor stands still (1.11).
 CONF_HOLD_OFFSET = "hold_offset"          # degrees past the unit's target sent at the target
@@ -48,6 +51,12 @@ DEFAULT_HOLD_EARLY = 0.2
 DEFAULT_STOP_MARGIN = 0.3
 DEFAULT_FAN_LOW_IDLE = True
 DEFAULT_FAN_IDLE_POWER_W = 0
+# Quiet night (1.12): the quietest fan speed in a chosen window while the unit runs.
+CONF_NIGHT_QUIET = "night_quiet"
+CONF_NIGHT_START = "night_start"
+CONF_NIGHT_END = "night_end"
+DEFAULT_NIGHT_START = "22:00:00"
+DEFAULT_NIGHT_END = "07:00:00"
 # Price steering, wake-up from the low-effort hold, turbo (1.4).
 CONF_PRICE_CONTROL = "price_control"
 CONF_PRICE_CHEAP_OFFSET = "price_cheap_offset"

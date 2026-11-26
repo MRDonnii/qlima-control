@@ -76,7 +76,10 @@
               "hold_early": "Turn down this much before the target",
               "stop_margin": "Stop when the room is this much over the target",
               "fan_low_when_idle": "Lowest fan while the unit is not heating",
-              "fan_idle_power_w": "The fan runs above (W)"
+              "fan_idle_power_w": "The fan runs above (W)",
+              "night_quiet": "Quiet at night",
+              "night_start": "Quiet from",
+              "night_end": "Quiet until"
             },
             "data_description": {
               "setpoint_compensation": "Not needed with Follow Me.",
@@ -85,7 +88,8 @@
               "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
               "stop_margin": "If the room still gets too warm, the unit is told to stop.",
               "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",
-              "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off)."
+              "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off).",
+              "night_quiet": "The fan runs on its quietest step (Silent if the unit has it) while the unit runs in the window. It heats a little slower. A fan speed you choose at night is kept until the window ends."
             }
           },
           "notifications": {
@@ -213,7 +217,10 @@
           "hold_early": "Turn down this much before the target",
           "stop_margin": "Stop when the room is this much over the target",
           "fan_low_when_idle": "Lowest fan while the unit is not heating",
-          "fan_idle_power_w": "The fan runs above (W)"
+          "fan_idle_power_w": "The fan runs above (W)",
+          "night_quiet": "Quiet at night",
+          "night_start": "Quiet from",
+          "night_end": "Quiet until"
         },
         "data_description": {
           "regulation": "The unit: it gets the room temperature as Follow Me and holds the target itself (no on/off cycling, no idling at 17 °C). The thermostat: on/off with hysteresis and a neutral idle at the lowest target. The unit falls back to the thermostat while Follow Me is off.",
@@ -223,7 +230,8 @@
           "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
           "stop_margin": "If the room still gets too warm, the unit is told to stop.",
           "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",
-          "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off)."
+          "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off).",
+          "night_quiet": "The fan runs on its quietest step (Silent if the unit has it) while the unit runs in the window. It heats a little slower. A fan speed you choose at night is kept until the window ends."
         }
       },
       "notifications": {
@@ -528,6 +536,9 @@
           "checking_start": "Checking the start",
           "no_follow_me": "Follow Me not received"
         }
+      },
+      "next_defrost": {
+        "name": "Next defrost in"
       }
     },
     "climate": {
@@ -590,6 +601,9 @@
       },
       "esp_connected": {
         "name": "ESP32 connected"
+      },
+      "cold_air": {
+        "name": "Cold air from the unit"
       }
     },
     "switch": {
@@ -616,6 +630,9 @@
       },
       "fan_low_when_idle": {
         "name": "Lowest fan while not heating"
+      },
+      "night_quiet": {
+        "name": "Quiet at night"
       }
     },
     "number": {
