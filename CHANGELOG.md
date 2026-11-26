@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.0 (firmware 1.5.0)
+Change by Claude AI – hold steered on the power meter (with half degrees and a power meter).
+- **Power hold.** The room sensor is slow and the unit lags, but the power meter shows at once how much heat the unit gives. In hold the room now decides the power wanted – what the room needs at the target, learned per 5 °C outdoor band while the room stands still there (start 1000 W; *follow_me_weather* → *hold_w*), plus 1500 W per K the room is short of the target (the rise over the next 3 min included) – and the Follow Me value moves half a degree at a time, at most every 3 min, until the power gets there (between +0 and +1.5, never as far as a stop). With the compressor off or in a defrost the value stays. New attribute *follow_me_power_want*.
+- **Works without a power meter.** Without one (or with firmware before 1.5.0) hold works as in 1.13; a reading that drops out keeps the value it had.
+
 ## 1.13.2 (firmware 1.5.0)
 Change by Claude AI – the start step hands over to hold in time, also with a slow room sensor (with half degrees).
 - **Learned coast decides the handover.** How far the room was measured to rise after the start step ended (per 5 °C outdoor band) is now where the start hands over, up to 1 K short of the target – before it could only make the handover later. Seen on the garage: the room sensor reports every ~5 min, the handover came at 23.44 and the room went on to 23.88.

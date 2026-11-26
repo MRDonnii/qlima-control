@@ -16,6 +16,7 @@ the value sent is steered in three steps (heat; cool is mirrored):
           +0 below the target, hold − 0.5 at it, the full hold value above (HOLD_BAND), and a
           start close to the target with the compressor running asks for only half a degree
           (SOFT_START), so it does not run flat out past the target;
+          with a power meter too, hold is steered on the power (see _power_hold);
   stop  – the room is `stop_at` above the target: the unit is told its *stop level* above
           (the room when further), so the compressor stops – until the room is `start_at`
           below the target again.
@@ -95,6 +96,14 @@ LEAD_MIN = 6.0        # min: the unit takes about this long to turn down – the
 LEAD_MAX = 1.0        # K: … but never more than this short of the target
 SLOPE_SPAN = 8 * 60   # s of room readings the rise rate is taken over (at least 3 min)
 RISING = 0.02         # K/min: the room counts as rising (hold stays on its full value, no soft start)
+POWER_GAIN = 1500.0   # W more wanted per K the room is (predicted) short of the target, in power hold
+POWER_PREDICT = 3.0   # min of the rise rate added to the shortfall in power hold (the unit lags)
+POWER_DEADBAND = 150.0  # W: power hold moves the value only when the power is this far off the wanted
+POWER_STEP_EVERY = 180  # s between two half-degree moves in power hold (the unit needs minutes to follow)
+POWER_MIN, POWER_MAX = 250.0, 3000.0
+HOLD_W_DEFAULT = 1000.0  # W the room needs at the target, until it is learned per outdoor band
+HOLD_W_ALPHA = 0.1    # how fast that is learned (per evaluation, while the room stands still at the target)
+HOLD_MAX_HALVES = 3   # power hold goes no further than +1.5 past the unit's target (a stop is further)
 AGE_MAX = 6 * 60      # s: a room reading this old is not extrapolated further (sensors report every few minutes)
 SOFT_MILD = 5.0       # °C outdoor: above it a soft start asks for half a degree, at or below a whole one
 SOFT_START = 0.5      # K: with half degrees, a start this close to the target (compressor running) asks for only half a degree
@@ -171,6 +180,9 @@ class FollowMe:
         self._rooms: list[tuple[float, float]] = []  # (time, room) for the rise rate
         self._rise: float | None = None  # K/min towards the target side (heat: rising > 0)
         self._room_seen: float | None = None  # last room value and when it last changed
+        self._ph: int | None = None  # power hold: half degrees past the unit's target now
+        self._ph_at = 0.0
+        self._power_want: float | None = None
         self._room_at = 0.0
         # Learned (kept in the store).
         self.levels = {m: _default_levels() for m in MODES}
@@ -341,10 +353,15 @@ class FollowMe:
         """The hold value in half degrees past the unit's target (setting minus what was learned)."""
         return max(0, int(round(2 * float(self.hold_offset))) - int(self.levels[mode].get("hold_cut", 0)))
 
-    def _hold_degrees(self, mode: str, short: float, ts: float = 0.0, sign: int = 1) -> float:
+    def _hold_degrees(self, mode: str, short: float, ts: float = 0.0, sign: int = 1, now: float = 0.0) -> float:
         half = self.hold_half(mode)
         if self.unit.half_degrees():
-            return self._hold_halves(half, short, ts, sign) / 2
+            h = self._hold_halves(half, short, ts, sign)
+            if self.unit.power() is not None or self._ph is not None:
+                # On the power meter (a reading that drops out keeps the value it had; without a
+                # meter at all this stays the room-band hold above).
+                h = self._power_hold(mode, half, h, short, ts, sign, now)
+            return h / 2
         if half % 2 == 0:
             return half // 2
         # Whole degrees only: take the two neighbours in turn, by the room.
@@ -375,6 +392,44 @@ class FollowMe:
         while h < half and fahrenheit_echo(ts + sign * h / 2) != ts + sign * h / 2:
             h += 1
         return h
+
+    def _power_hold(self, mode: str, half: int, h_room: int, short: float, ts: float, sign: int, now: float) -> int:
+        """Hold steered on the power meter (half degrees past the unit's target).
+
+        The room sensor is slow (minutes) and the unit lags; the power shows at once how much heat
+        it gives. So the room decides the power wanted – what the room needs at the target
+        (learned per outdoor band while it stands still there), more when it is (about to be)
+        short, less when over – and the value sent moves half a degree at a time, at most every
+        POWER_STEP_EVERY, until the power gets there: more than wanted → "warmer", less → "colder".
+        Between +0 and +1.5 (never as far as a stop); with the compressor off or in a defrost it
+        stays as it is. It starts from the room-band value when hold begins.
+        """
+        power = self.unit.power()
+        cap = max(0, min(HOLD_MAX_HALVES, half + 1, 2 * self.stop_level(mode) - 1))
+        if self._ph is None:
+            self._ph, self._ph_at = min(cap, h_room), now
+        stats = self.weather[mode].setdefault(self.band() or "", {}) if self.band() is not None else {}
+        base_w = float(stats.get("hold_w", HOLD_W_DEFAULT))
+        rise = self._rise or 0.0
+        predicted = short - rise * POWER_PREDICT
+        want = max(POWER_MIN, min(POWER_MAX, base_w + POWER_GAIN * predicted))
+        running = bool(self._compressor(now)) and not self._defrosting()
+        if running and power is not None:
+            if abs(short) < 0.15 and abs(rise) < 0.01 and self.band() is not None:
+                # Standing still at the target: this is what the room needs here.
+                stats["hold_w"] = round(base_w + (power - base_w) * HOLD_W_ALPHA, 1)
+                self._save()
+            if now - self._ph_at >= POWER_STEP_EVERY:
+                if power > want + POWER_DEADBAND and self._ph < cap:
+                    self._ph, self._ph_at = self._ph + 1, now
+                elif power < want - POWER_DEADBAND and self._ph > 0:
+                    self._ph, self._ph_at = self._ph - 1, now
+        h = min(self._ph, cap)
+        # A half no whole °F reaches: the neighbour past the target, else the one before it.
+        if fahrenheit_echo(ts + sign * h / 2) != ts + sign * h / 2:
+            h = h + 1 if h < cap else h - 1
+        self._power_want = want
+        return max(0, h)
 
     def _slope(self, now: float, room: float) -> float | None:
         """How fast the room moves, K/min (heat: rising > 0), over the last SLOPE_SPAN."""
@@ -415,6 +470,8 @@ class FollowMe:
             if room != self._room_seen:
                 self._room_seen, self._room_at = room, now
             step = self._next_step(short, now, mode)
+            if step == "hold" and self.step != "hold":
+                self._ph = None  # power hold starts afresh from the room-band value
             lv = self.levels[mode]
             ts = steering.unit_target
             boost = self._boost if step == self.step else 0
@@ -437,7 +494,7 @@ class FollowMe:
                 level = ts + sign * self.stop_level(mode)
                 base = max(math.ceil(room), level) if sign > 0 else min(math.floor(room), level)
             else:
-                base = ts + sign * self._hold_degrees(mode, short, ts, sign)
+                base = ts + sign * self._hold_degrees(mode, short, ts, sign, now)
             value = float(base)
         if step != self.step:
             self._enter(step, room, now)
@@ -937,6 +994,7 @@ class FollowMe:
             "follow_me_history": copy.deepcopy(self.history),
             "follow_me_echo": self.echo,
             "follow_me_echo_offset": self.echo_offset,
+            "follow_me_power_want": None if self._power_want is None else round(self._power_want),
         }
 
     def reset(self) -> None:
