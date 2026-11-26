@@ -44,6 +44,7 @@ ESP_ROLES: dict[str, tuple[str, tuple[str, ...]]] = {
     "display": ("button", ("Display",)),
     "filter_reset": ("button", ("Nulstil filtertæller",)),
     "follow_me": ("switch", ("Follow Me",)),
+    "follow_me_half": ("switch", ("Follow Me i halve grader",)),  # firmware 1.5+: Follow Me in °F
     "beep": ("switch", ("Bip",)),
     "outdoor": ("sensor", ("Udetemperatur",)),
     "unit_temp": ("sensor", ("Indetemperatur anlæg",)),
@@ -226,6 +227,12 @@ class QlimaUnit:
 
     def unit_temperature(self) -> float | None:
         return self._float(self.entity("unit_temp"))
+
+    def half_degrees(self) -> bool:
+        """The ESP sends Follow Me in half degrees (firmware 1.5+, switch on)."""
+        entity = self.entity("follow_me_half")
+        state = self.hass.states.get(entity) if entity else None
+        return state is not None and state.state == "on"
 
     def price(self) -> float | None:
         return self._float(self.price_sensor)

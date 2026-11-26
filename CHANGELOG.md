@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.0 (firmware 1.5.0)
+Change by Claude AI – Follow Me in half degrees. Nothing here switches a unit on or off, or between heat pump and district heating.
+- **Firmware 1.5.0: Follow Me in half degrees.** New switch *Follow Me i halve grader* (on by default). The ESP sends Follow Me over IR in whole °F, which a Qlima S 52xx rounds to the nearest 0.5 °C (tested on the garage 2026-11-26: 71 °F → 21.5, 72 → 22.0, 73 → 23.0, 74 → 23.5), instead of whole °C. Home Assistant, the target and the card stay in °C. Whole degrees give the same value as before; 22.5 and 27.5 cannot be reached with a whole °F, so these are sent as 22 and 27.
+- **Hold sends the half degree itself.** When the ESP has the switch on, a half-degree hold value (e.g. +0.5) is sent as it is, instead of taking the two neighbouring degrees in turn. The echo check knows the half degree the unit should report.
+
 ## 1.12.0 (firmware 1.4.5)
 Change by Claude AI – a unit that is on runs better. Nothing here switches a unit on or off, or between heat pump and district heating.
 - **Quiet at night** (new setting and switch *Stille om natten*, off by default; window *Stille fra*/*Stille til*, default 22:00–07:00, may run past midnight). While the unit heats or cools in the window its fan stays on the quietest step (Silent when the unit has it, else low). The user's own speed comes back when the window ends. A speed somebody chooses in the window is kept until it ends.

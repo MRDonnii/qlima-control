@@ -28,7 +28,7 @@
 esphome:
   project:
     name: mrdonnii.qlima-control
-    version: "1.4.5"
+    version: "1.5.0"
   includes:
     - <esp_wifi.h>   # sendestyrken hæves efter tilslutning (se wifi:)
 
@@ -44,7 +44,7 @@ api:
         temperature: float
       then:
         - lambda: |-
-            const bool changed = isnan(id(room_ext)) || fabsf(id(room_ext) - temperature) >= 0.5f;
+            const bool changed = isnan(id(room_ext)) || fabsf(id(room_ext) - temperature) >= 0.25f;
             id(room_ext) = temperature;
             id(room_at) = millis();
             if (changed) id(send_follow_me).execute();
@@ -282,6 +282,18 @@ switch:
     entity_category: config
     on_turn_on:
       - script.execute: send_follow_me
+  # Follow Me i halve grader: sendes i °F via IR, men alt andet (HA, mål, display) er °C.
+  - platform: template
+    name: Follow Me i halve grader
+    id: follow_me_half
+    icon: mdi:thermometer-lines
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    on_turn_on:
+      - script.execute: send_follow_me
+    on_turn_off:
+      - script.execute: send_follow_me
   - platform: template
     name: Bip
     icon: mdi:volume-high
@@ -347,8 +359,21 @@ script:
             lambda: 'return id(follow_me_on).state && id(room_at) != 0 && millis() - id(room_at) < 600000 && id(ac).mode != climate::CLIMATE_MODE_OFF;'
           then:
             - midea_ac.follow_me:
-                temperature: !lambda 'return id(room_ext);'
-                use_fahrenheit: false
+                # Halve grader: Qlima S 52xx runder en °F-værdi til nærmeste 0,5 °C (testet
+                # 2026-11-26), °C-beskeden kun til hele grader. Vælg den hele °F, hvis °C-værdi
+                # runder til den ønskede halve grad. Hele grader giver samme værdi som før.
+                temperature: !lambda |-
+                  const float c = id(room_ext);
+                  if (!id(follow_me_half).state) return c;
+                  const float want = roundf(c * 2.0f) / 2.0f;
+                  float best = roundf(c * 1.8f + 32.0f), err = 99.0f;
+                  for (int f = (int) best - 2; f <= (int) best + 2; f++) {
+                    const float fc = (f - 32) / 1.8f;
+                    const float e = fabsf(roundf(fc * 2.0f) / 2.0f - want) * 10.0f + fabsf(fc - c);
+                    if (e < err) { err = e; best = f; }
+                  }
+                  return best;
+                use_fahrenheit: !lambda 'return id(follow_me_half).state;'
                 beeper: false
 
 interval:

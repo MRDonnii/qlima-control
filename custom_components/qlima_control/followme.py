@@ -28,9 +28,12 @@ power reading or defrosts. Its levels are learned from what it does (compressor,
   - still working CHECKS["stop"] after stop (beyond its own minimum run) → stop level +1;
   - stopped in hold, where it should run, for CHECKS["hold"] (twice as long in defrost
     weather, where such a stop looks like a defrost), the second time in a row → the hold
-    value comes half a degree closer to the target: Follow Me is whole degrees, so a half
-    is the two neighbouring degrees in turn (the lower one while the room is below the
-    target, the higher one once it is above) – e.g. +1, then +1/+0, then +0;
+    value comes half a degree closer to the target – e.g. +1, then +0.5, then +0. With firmware
+    1.5+ ("Follow Me i halve grader") the ESP sends Follow Me in °F, which the unit rounds to
+    half degrees, so the half is sent as it is (except the few halves no whole °F reaches,
+    see fahrenheit_echo). Otherwise Follow Me is whole degrees, and a half is the two
+    neighbouring degrees in turn (the lower one while the room is below the target, the
+    higher one once it is above);
   - idle CHECKS["start"] in start → start level +1;
   - working CHECKS["rise"] in start without the room coming up while RISE_SHORT short →
     this start only is pushed a degree further;
@@ -100,6 +103,29 @@ def _default_levels() -> dict[str, Any]:
 
 
 @dataclass
+
+def _half(value: float) -> float:
+    return math.floor(value * 2 + 0.5) / 2
+
+
+def fahrenheit_echo(celsius: float) -> float:
+    """The half degree a Qlima S 52xx acts on for Follow Me sent the way firmware 1.5 does.
+
+    The ESP sends the whole °F whose °C value rounds to the wanted half degree (nearest one
+    on a tie); the unit rounds that to the nearest 0.5 °C (tested 2026-11-26: 71 °F → 21.5,
+    72 → 22.0, 73 → 23.0, 74 → 23.5). A few halves, e.g. 22.5 and 27.5, no whole °F reaches.
+    Mirror of the lambda in esphome/qlima-control.yaml (send_follow_me).
+    """
+    want = _half(celsius)
+    first = round(celsius * 1.8 + 32)
+    best, err = first, 99.0
+    for f in range(first - 2, first + 3):
+        fc = (f - 32) / 1.8
+        e = abs(_half(fc) - want) * 10 + abs(fc - celsius)
+        if e < err:
+            best, err = f, e
+    return _half((best - 32) / 1.8)
+
 class Steering:
     """What the thermostat regulates to right now."""
 
@@ -291,10 +317,14 @@ class FollowMe:
         """The hold value in half degrees past the unit's target (setting minus what was learned)."""
         return max(0, 2 * int(self.hold_offset) - int(self.levels[mode].get("hold_cut", 0)))
 
-    def _hold_degrees(self, mode: str, short: float) -> int:
+    def _hold_degrees(self, mode: str, short: float, ts: float = 0.0, sign: int = 1) -> float:
         half = self.hold_half(mode)
         if half % 2 == 0:
             return half // 2
+        if self.unit.half_degrees():
+            value = ts + sign * half / 2
+            if fahrenheit_echo(value) == value:
+                return half / 2
         # Whole degrees only: take the two neighbours in turn, by the room.
         if short >= DITHER:
             self._dither_low = True
@@ -341,7 +371,7 @@ class FollowMe:
                 level = ts + sign * self.stop_level(mode)
                 base = max(math.ceil(room), level) if sign > 0 else min(math.floor(room), level)
             else:
-                base = ts + sign * self._hold_degrees(mode, short)
+                base = ts + sign * self._hold_degrees(mode, short, ts, sign)
             value = float(base)
         if step != self.step:
             self._enter(step, room, now)
@@ -550,7 +580,9 @@ class FollowMe:
         if reported is None:
             self._bad_since, self._pairs = None, {}
             return "unknown"
-        expected = math.floor(sent + 0.5)  # the ESP rounds like lroundf
+        # What the unit should act on: whole degrees (the ESP rounds like lroundf), or with
+        # Follow Me in °F the half degree the unit makes of the whole °F the ESP picks.
+        expected = fahrenheit_echo(sent) if self.unit.half_degrees() else math.floor(sent + 0.5)
         if abs(reported - expected - self.echo_offset) < 0.5:
             self._bad_since, self._pairs = None, {}
             if not self.echo:
