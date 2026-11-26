@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.2 (firmware 1.5.0)
+Change by Claude AI – power hold in the meter's own watts.
+- 1.14.0/1.14.1 used fixed watts (start 1000 W, 1500 W per K, 150 W dead band) taken from a heat-output sensor, but the power meter gives electric watts – about a third. On the garage it wanted 830 W where the room needs ~330 W electric, and asked for more heat.
+- Now nothing is fixed: power hold first learns what the unit draws to hold the room (per 5 °C outdoor band, once a minute while the room stands still after 10 min of hold; *hold_w3*), and only steers once 10 minutes are learned – until then hold works as in 1.13. Gain (1.5 × the learned power per K), dead band (15 %, at least 40 W) and limits (0.3–3 ×) are relative to what was learned, so it fits any unit and meter.
+
 ## 1.14.1 (firmware 1.5.0)
 Change by Claude AI – power hold learns the right power.
 - On the garage 1.14.0 learned 445 W where the room needs about 950 W: it learned while the unit was still ramping up after a start, on every call instead of once a minute, and only right at the target, so a room standing a little short never corrected it.

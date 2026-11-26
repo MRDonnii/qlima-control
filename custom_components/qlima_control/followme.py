@@ -96,15 +96,15 @@ LEAD_MIN = 6.0        # min: the unit takes about this long to turn down – the
 LEAD_MAX = 1.0        # K: … but never more than this short of the target
 SLOPE_SPAN = 8 * 60   # s of room readings the rise rate is taken over (at least 3 min)
 RISING = 0.02         # K/min: the room counts as rising (hold stays on its full value, no soft start)
-POWER_GAIN = 1500.0   # W more wanted per K the room is (predicted) short of the target, in power hold
+POWER_GAIN = 1.5      # per K the room is (predicted) short of the target, wanted power is this × the learned power more
 POWER_PREDICT = 3.0   # min of the rise rate added to the shortfall in power hold (the unit lags)
-POWER_DEADBAND = 150.0  # W: power hold moves the value only when the power is this far off the wanted
+POWER_DEADBAND = 0.15  # power hold moves the value only when the power is this share of the learned power off
+POWER_DEADBAND_MIN = 40.0  # W, at least
 POWER_STEP_EVERY = 180  # s between two half-degree moves in power hold (the unit needs minutes to follow)
-POWER_MIN, POWER_MAX = 250.0, 3000.0
-HOLD_W_DEFAULT = 1000.0  # W the room needs at the target, until it is learned per outdoor band
-HOLD_W_ALPHA = 0.1    # how fast that is learned (once a minute, while the room stands still)
+HOLD_W_ALPHA = 0.1    # how fast the power the room needs is learned (once a minute, while the room stands still)
+HOLD_W_MIN_N = 10     # minutes learned before power hold steers (until then: the room-band hold)
 HOLD_W_SETTLE = 10 * 60  # s the compressor must have run, and hold lasted, before the power is learned
-HOLD_W_KEY = "hold_w2"   # learned W per outdoor band (1.14.0 learned "hold_w" too eagerly – not used)
+HOLD_W_KEY = "hold_w3"   # learned W per outdoor band, in the meter's own watts (1.14.0/1.14.1 keys not used)
 HOLD_MAX_HALVES = 3   # power hold goes no further than +1.5 past the unit's target (a stop is further)
 AGE_MAX = 6 * 60      # s: a room reading this old is not extrapolated further (sensors report every few minutes)
 SOFT_MILD = 5.0       # °C outdoor: above it a soft start asks for half a degree, at or below a whole one
@@ -400,38 +400,48 @@ class FollowMe:
         """Hold steered on the power meter (half degrees past the unit's target).
 
         The room sensor is slow (minutes) and the unit lags; the power shows at once how much heat
-        it gives. So the room decides the power wanted – what the room needs at the target
-        (learned per outdoor band while it stands still there), more when it is (about to be)
-        short, less when over – and the value sent moves half a degree at a time, at most every
-        POWER_STEP_EVERY, until the power gets there: more than wanted → "warmer", less → "colder".
-        Between +0 and +1.5 (never as far as a stop); with the compressor off or in a defrost it
-        stays as it is. It starts from the room-band value when hold begins.
+        it gives. First it learns what this unit draws to hold the room – in the meter's own watts,
+        per outdoor band, once a minute while the room stands still after 10 min of hold – and
+        until HOLD_W_MIN_N minutes are learned the room-band hold steers. Then the room decides the
+        power wanted (the learned power, POWER_GAIN × it more per K the room is about to be short)
+        and the value sent moves half a degree at a time, at most every POWER_STEP_EVERY, until the
+        power gets there: more than wanted → "warmer", less → "colder". Between +0 and +1.5 (never
+        as far as a stop); with the compressor off, in a defrost or without a reading it stays.
         """
         power = self.unit.power()
         cap = max(0, min(HOLD_MAX_HALVES, half + 1, 2 * self.stop_level(mode) - 1))
         if self._ph is None:
             self._ph, self._ph_at = min(cap, h_room), now
-        stats = self.weather[mode].setdefault(self.band() or "", {}) if self.band() is not None else {}
-        base_w = float(stats.get(HOLD_W_KEY, HOLD_W_DEFAULT))
+        band = self.band()
+        stats = self.weather[mode].setdefault(band, {}) if band is not None else {}
+        base_w = stats.get(HOLD_W_KEY)
+        learned = base_w is not None and stats.get(HOLD_W_KEY + "_n", 0) >= HOLD_W_MIN_N
         rise = self._rise or 0.0
-        predicted = short - rise * POWER_PREDICT
-        want = max(POWER_MIN, min(POWER_MAX, base_w + POWER_GAIN * predicted))
         running = bool(self._compressor(now)) and not self._defrosting()
-        if running and power is not None:
+        if running and power is not None and power > 0:
             settled = (self._on_since is not None and now - self._on_since >= HOLD_W_SETTLE
                        and now - self._step_since >= HOLD_W_SETTLE)
             if (settled and self._rise is not None and abs(self._rise) < 0.01 and abs(short) < 0.5
-                    and self.band() is not None and now - self._hold_w_at >= 60):
+                    and band is not None and now - self._hold_w_at >= 60):
                 # The room stands still: the power it gets now is what it needs (also a little off
-                # the target – so a wrong guess corrects itself instead of leaving the room short).
+                # the target – so the estimate corrects itself instead of leaving the room short).
                 self._hold_w_at = now
-                stats[HOLD_W_KEY] = round(max(POWER_MIN, min(POWER_MAX, base_w + (power - base_w) * HOLD_W_ALPHA)), 1)
+                old = float(base_w) if base_w is not None else float(power)
+                stats[HOLD_W_KEY] = round(old + (power - old) * HOLD_W_ALPHA, 1)
+                stats[HOLD_W_KEY + "_n"] = int(stats.get(HOLD_W_KEY + "_n", 0)) + 1
                 self._save()
-            if now - self._ph_at >= POWER_STEP_EVERY:
-                if power > want + POWER_DEADBAND and self._ph < cap:
-                    self._ph, self._ph_at = self._ph + 1, now
-                elif power < want - POWER_DEADBAND and self._ph > 0:
-                    self._ph, self._ph_at = self._ph - 1, now
+        if not learned:
+            self._ph, self._power_want = min(cap, h_room), None
+            return h_room
+        base = float(base_w)
+        predicted = short - rise * POWER_PREDICT
+        want = max(0.3 * base, min(3.0 * base, base * (1 + POWER_GAIN * predicted)))
+        deadband = max(POWER_DEADBAND_MIN, POWER_DEADBAND * base)
+        if running and power is not None and now - self._ph_at >= POWER_STEP_EVERY:
+            if power > want + deadband and self._ph < cap:
+                self._ph, self._ph_at = self._ph + 1, now
+            elif power < want - deadband and self._ph > 0:
+                self._ph, self._ph_at = self._ph - 1, now
         h = min(self._ph, cap)
         # A half no whole °F reaches: the neighbour past the target, else the one before it.
         if fahrenheit_echo(ts + sign * h / 2) != ts + sign * h / 2:
