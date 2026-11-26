@@ -31,7 +31,23 @@ LIVE_KEYS = frozenset({
     "price_cheap_offset",
     "price_expensive_offset",
     "auto_wake",
+    "hold_offset",
+    "hold_early",
+    "stop_margin",
+    "fan_low_when_idle",
+    "fan_idle_power_w",
 })
+# Follow Me hold and the fan while the compressor stands still (1.11).
+CONF_HOLD_OFFSET = "hold_offset"          # degrees past the unit's target sent at the target
+CONF_HOLD_EARLY = "hold_early"            # K short of the target where the start push ends
+CONF_STOP_MARGIN = "stop_margin"          # K past the target where the stop step begins
+CONF_FAN_LOW_IDLE = "fan_low_when_idle"   # lowest fan speed while the compressor stands still
+CONF_FAN_IDLE_POWER_W = "fan_idle_power_w"  # fan-only power threshold (0 = learned from standby)
+DEFAULT_HOLD_OFFSET = 1
+DEFAULT_HOLD_EARLY = 0.2
+DEFAULT_STOP_MARGIN = 0.3
+DEFAULT_FAN_LOW_IDLE = True
+DEFAULT_FAN_IDLE_POWER_W = 0
 # Price steering, wake-up from the low-effort hold, turbo (1.4).
 CONF_PRICE_CONTROL = "price_control"
 CONF_PRICE_CHEAP_OFFSET = "price_cheap_offset"
@@ -106,7 +122,8 @@ DEFAULT_OPENING_RESUME_DELAY_MINUTES = 10
 # What the unit is turned down to while a door/window is open (before switch-off).
 OPENING_REDUCE_SETPOINT = "setpoint"
 OPENING_REDUCE_MINIMUM = "minimum"
-DEFAULT_OPENING_REDUCE_TO = OPENING_REDUCE_SETPOINT
+OPENING_REDUCE_OFF = "off"  # switch the unit off already after the turn-down delay (1.11 default)
+DEFAULT_OPENING_REDUCE_TO = OPENING_REDUCE_OFF
 # Who regulates the room: the unit itself on the room temperature it gets as Follow Me
 # (target = room target, no hysteresis/neutral idle), or the thermostat with hysteresis
 # and a neutral idle at the lowest target. "unit" falls back to "thermostat" while

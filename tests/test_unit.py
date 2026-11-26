@@ -78,7 +78,7 @@ async def _setup(hass, device, **extra):
         "opening_sensors": ["binary_sensor.door"], "heat_target": 22, "cool_target": 25,
         **extra,
     }
-    entry = MockConfigEntry(domain=DOMAIN, title="Test", data=data)
+    entry = MockConfigEntry(domain=DOMAIN, title="Test", data=data, minor_version=2)
     entry.add_to_hass(hass)
     with patch.object(q_climate, "_TARGET_CONFIRM_SECONDS", 1):
         assert await hass.config_entries.async_setup(entry.entry_id)

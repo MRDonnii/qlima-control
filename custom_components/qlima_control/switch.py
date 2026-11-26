@@ -33,6 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities.append(OptionSwitch(hass, entry, "price_control", False, "mdi:cash-sync"))
     if unit.power_switch:
         entities.append(OptionSwitch(hass, entry, "auto_wake", False, "mdi:alarm-light-outline"))
+    entities.append(OptionSwitch(hass, entry, "fan_low_when_idle", True, "mdi:fan-chevron-down"))
     entities.append(TurboSwitch(hass, entry))
     async_add_entities(entities)
 

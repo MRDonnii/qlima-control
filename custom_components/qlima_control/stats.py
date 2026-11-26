@@ -21,6 +21,8 @@ _TICK = timedelta(seconds=30)
 _DEFROST_MAX_OUTDOOR = 6.0
 _DEFROST_LOW_W = 120
 _DEFROST_RUN_W = 300
+_STARTUP_GRACE = 10 * 60  # s after a start whose dips are the soft start, not defrosts
+_DEFROST_MAX = 15 * 60    # s: a longer drop is a stop
 
 
 class QlimaStats:
@@ -37,6 +39,10 @@ class QlimaStats:
         self._running = False
         self._was_running_at_speed = 0.0
         self.defrosting = False
+        self._run_start: float | None = None
+        self._dip_at: float | None = None
+        self._dip_step: str | None = None
+        self._dip_pushed = False
 
     async def async_start(self) -> None:
         self.data = await self._store.async_load() or {}
@@ -113,6 +119,14 @@ class QlimaStats:
         self._save()
 
     def _detect_defrost(self, mode: str | None) -> None:
+        """A defrost: heating at speed, a drop while cold outside, and the unit resumes by itself.
+
+        Not counted (1.11): drops within _STARTUP_GRACE of a start (the soft start dips twice),
+        stops the thermostat asked for (stop step, off, door), drops that end only because the
+        thermostat pushed a start, and drops longer than _DEFROST_MAX (a stop, not a defrost).
+        A drop is counted once it ends. `defrosting` is set from the drop on, so the Follow Me
+        learning pauses during it.
+        """
         own = self.unit.unit_defrost()
         if own is not None:
             # The unit reports its defrost itself (service data): count each start.
@@ -122,25 +136,37 @@ class QlimaStats:
             return
         power, outdoor = self.unit.power(), self.unit.outdoor()
         if mode != "heat" or power is None or outdoor is None or outdoor > _DEFROST_MAX_OUTDOOR:
-            self.defrosting = False
+            self.defrosting, self._dip_at = False, None
             return
         thermostat = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id)
         if thermostat is not None and thermostat.stop_requested():
             # The compressor stops because it was told to – that drop is no defrost.
-            self.defrosting = False
+            self.defrosting, self._dip_at = False, None
             self._was_running_at_speed = 0.0
             return
+        now = time()
+        step = getattr(thermostat, "follow_me_step", lambda: None)() if thermostat is not None else None
+        if self._dip_at is not None and step == "start" and self._dip_step != "start":
+            self._dip_pushed = True  # it only comes back because the thermostat pushed a start
+        recently_running = now - self._was_running_at_speed < 120
         if power >= _DEFROST_RUN_W:
-            self._was_running_at_speed = time()
+            if not recently_running:
+                self._run_start = now  # a (re)start: its soft-start dips follow
+            self._was_running_at_speed = now
             if self.defrosting:
                 self.defrosting = False
+                if self._dip_at is not None and now - self._dip_at <= _DEFROST_MAX and not self._dip_pushed:
+                    self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
+            self._dip_at = None
             return
-        recently_running = time() - self._was_running_at_speed < 120
         if power < _DEFROST_LOW_W and recently_running and not self.defrosting:
-            self.defrosting = True
-            self.data["defrosts_day"] = self.data.get("defrosts_day", 0) + 1
-        elif not recently_running and time() - self._was_running_at_speed > 900:
-            self.defrosting = False
+            if self._run_start is not None and now - self._run_start < _STARTUP_GRACE:
+                return  # the soft start dips: no defrost
+            self.defrosting, self._dip_at, self._dip_step, self._dip_pushed = True, now, step, False
+        elif self.defrosting and self._dip_at is not None and now - self._dip_at > _DEFROST_MAX:
+            self.defrosting, self._dip_at = False, None  # too long for a defrost: it was a stop
+        elif not recently_running and now - self._was_running_at_speed > 900:
+            self.defrosting, self._dip_at = False, None
 
     # --- values ------------------------------------------------------------
     def value(self, key: str) -> float | int | None:

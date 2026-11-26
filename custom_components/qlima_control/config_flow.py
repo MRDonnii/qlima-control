@@ -71,6 +71,17 @@ from .const import (
     MODEL_P_MAX,
     OPENING_REDUCE_MINIMUM,
     OPENING_REDUCE_SETPOINT,
+    OPENING_REDUCE_OFF,
+    CONF_HOLD_OFFSET,
+    CONF_HOLD_EARLY,
+    CONF_STOP_MARGIN,
+    CONF_FAN_LOW_IDLE,
+    CONF_FAN_IDLE_POWER_W,
+    DEFAULT_HOLD_OFFSET,
+    DEFAULT_HOLD_EARLY,
+    DEFAULT_STOP_MARGIN,
+    DEFAULT_FAN_LOW_IDLE,
+    DEFAULT_FAN_IDLE_POWER_W,
     CONF_AUTO_WAKE,
     CONF_PRICE_CHEAP_OFFSET,
     CONF_PRICE_CONTROL,
@@ -160,7 +171,7 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             vol.Required(CONF_OPENING_OFF_DELAY_MINUTES, default=d.get(CONF_OPENING_OFF_DELAY_MINUTES, DEFAULT_OPENING_OFF_DELAY_MINUTES)): _number(0, 600, 1, "min"),
             vol.Required(CONF_OPENING_RESUME_DELAY_MINUTES, default=d.get(CONF_OPENING_RESUME_DELAY_MINUTES, DEFAULT_OPENING_RESUME_DELAY_MINUTES)): _number(0, 180, 1, "min"),
             vol.Required(CONF_OPENING_REDUCE_TO, default=d.get(CONF_OPENING_REDUCE_TO, DEFAULT_OPENING_REDUCE_TO)): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=[OPENING_REDUCE_SETPOINT, OPENING_REDUCE_MINIMUM], translation_key="opening_reduce_to")
+                selector.SelectSelectorConfig(options=[OPENING_REDUCE_OFF, OPENING_REDUCE_SETPOINT, OPENING_REDUCE_MINIMUM], translation_key="opening_reduce_to")
             ),
         }
     if name == "control":
@@ -176,6 +187,11 @@ def _fields(name: str, d: dict[str, Any]) -> dict[Any, Any]:
             vol.Required(CONF_MIN_OFF_MINUTES, default=d.get(CONF_MIN_OFF_MINUTES, DEFAULT_MIN_OFF_MINUTES)): _number(3, 60, 1, "min"),
             vol.Required(CONF_MANUAL_OVERRIDE_MINUTES, default=d.get(CONF_MANUAL_OVERRIDE_MINUTES, DEFAULT_MANUAL_OVERRIDE_MINUTES)): _number(0, 1440, 5, "min"),
             vol.Required(CONF_SETPOINT_COMPENSATION, default=d.get(CONF_SETPOINT_COMPENSATION, False)): bool,
+            vol.Required(CONF_HOLD_OFFSET, default=d.get(CONF_HOLD_OFFSET, DEFAULT_HOLD_OFFSET)): _number(0, 3, 1, "°C"),
+            vol.Required(CONF_HOLD_EARLY, default=d.get(CONF_HOLD_EARLY, DEFAULT_HOLD_EARLY)): _number(0.0, 0.5, 0.05, "°C"),
+            vol.Required(CONF_STOP_MARGIN, default=d.get(CONF_STOP_MARGIN, DEFAULT_STOP_MARGIN)): _number(0.15, 1.5, 0.05, "°C"),
+            vol.Required(CONF_FAN_LOW_IDLE, default=d.get(CONF_FAN_LOW_IDLE, DEFAULT_FAN_LOW_IDLE)): bool,
+            vol.Required(CONF_FAN_IDLE_POWER_W, default=d.get(CONF_FAN_IDLE_POWER_W, DEFAULT_FAN_IDLE_POWER_W)): _number(0, 80, 1, "W"),
             _opt("presence_entity", d): _entities(["person", "group", "binary_sensor", "alarm_control_panel", "input_boolean", "zone"]),
             vol.Required("away_setback", default=d.get("away_setback", 3)): _number(0, 10, 1, "°C"),
         }
@@ -268,6 +284,7 @@ class QlimaControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Add one heat pump."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     async def async_step_user(self, user_input=None):
         errors: dict[str, str] = {}

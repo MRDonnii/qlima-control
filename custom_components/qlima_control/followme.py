@@ -6,9 +6,12 @@ the value sent is steered in three steps (heat; cool is mirrored):
 
   start – the room is `start_at` below the target: the unit is told the room is at least
           its *start level* below its target (the room itself when that is further off),
-          so it works – until the room reaches the target;
-  hold  – at the target: one degree short of the *stop level*, so a running unit turns
-          down and keeps running, and a stopped one stays off;
+          so it works – until the room is `hold_early` short of the target (it still rises
+          a little after the push ends);
+  hold  – at the target: at most `hold_offset` (default 1) degree past the unit's own
+          target, so a running inverter turns down to its minimum and keeps running.
+          It no longer depends on the stop level (1.10 sent stop level − 1, which was 2–3
+          past the target on the garage and stopped the compressor anyway);
   stop  – the room is `stop_at` above the target: the unit is told its *stop level* above
           (the room when further), so the compressor stops – until the room is `start_at`
           below the target again.
@@ -24,8 +27,10 @@ confirms the value sent right now, nor while the unit is offline, shows a fault 
 power reading or defrosts. Its levels are learned from what it does (compressor, else power):
   - still working CHECKS["stop"] after stop (beyond its own minimum run) → stop level +1;
   - stopped in hold, where it should run, for CHECKS["hold"] (twice as long in defrost
-    weather, where such a stop looks like a defrost) → stop level −1 – only on the second
-    time in a row when the level was needed for a stop, so one odd stop does not undo it;
+    weather, where such a stop looks like a defrost), the second time in a row → the hold
+    value comes half a degree closer to the target: Follow Me is whole degrees, so a half
+    is the two neighbouring degrees in turn (the lower one while the room is below the
+    target, the higher one once it is above) – e.g. +1, then +1/+0, then +0;
   - idle CHECKS["start"] in start → start level +1;
   - working CHECKS["rise"] in start without the room coming up while RISE_SHORT short →
     this start only is pushed a degree further;
@@ -79,14 +84,19 @@ BAND = 5
 TRACK_MAX = 45 * 60
 TRACK_TURN = 0.2
 HISTORY = 10
+DITHER = 0.1           # K: a half-degree hold uses the lower degree below target − this, the higher above target + this
+HOLD_OFFSET = 1        # degrees past the unit's target sent in hold (setting)
+HOLD_EARLY = 0.2       # K short of the target where the start step hands over to hold (setting)
+HOLD_CUT_MAX = 6
 MODES = ("heat", "cool")
 STORE_VERSION = 1
 
 
 def _default_levels() -> dict[str, Any]:
     # stop/start: degrees past/short of the unit's target it must be told to stop/start;
-    # floor: lowest stop level a stop has needed; strikes: odd stops in hold at the floor.
-    return {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False}
+    # floor: lowest stop level a stop has needed (kept for older stores); strikes: stops in
+    # hold in a row; hold_cut: half degrees the hold value was brought closer to the target.
+    return {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False, "hold_cut": 0}
 
 
 @dataclass
@@ -114,6 +124,11 @@ class FollowMe:
         self._store = Store(hass, STORE_VERSION, f"qlima_control.followme.{entry.entry_id}")
         self.min_run = 20 * 60
         self.min_off = 10 * 60
+        # Settings (set by the thermostat from the options).
+        self.hold_offset = HOLD_OFFSET
+        self.hold_early = HOLD_EARLY
+        self.stop_margin = STOP
+        self._dither_low = False
         # Learned (kept in the store).
         self.levels = {m: _default_levels() for m in MODES}
         self.verified = {m: {"stop": False, "start": False} for m in MODES}
@@ -182,7 +197,7 @@ class FollowMe:
             lv = _default_levels()
             saved = levels.get(mode)
             if isinstance(saved, dict):
-                for key in ("stop", "start", "floor", "strikes"):
+                for key in ("stop", "start", "floor", "strikes", "hold_cut"):
                     try:
                         lv[key] = int(saved.get(key, lv[key]))
                     except (TypeError, ValueError):
@@ -192,6 +207,7 @@ class FollowMe:
             lv["start"] = max(1, min(START_MAX, lv["start"]))
             lv["floor"] = max(1, min(lv["stop"], lv["floor"]))
             lv["strikes"] = max(0, min(1, lv["strikes"]))
+            lv["hold_cut"] = max(0, min(HOLD_CUT_MAX, lv["hold_cut"]))
             self.levels[mode] = lv
             v = verified.get(mode) if isinstance(verified.get(mode), dict) else {}
             self.verified[mode] = {k: bool(v.get(k, False)) for k in ("stop", "start")}
@@ -249,13 +265,42 @@ class FollowMe:
     # ------------------------------------------------------------------ steering
     def thresholds(self, mode: str) -> tuple[float, float]:
         """(start_at, stop_at): how far from the target the start/stop steps begin here."""
-        start_at, stop_at = START, STOP
+        base = self.stop_margin
+        start_at, stop_at = START, base
         stats = self.weather[mode].get(self.band() or "", {})
         if stats.get("n_under", 0) >= 2:
             start_at = max(MIN_START, START - max(0.0, stats.get("under", 0.0) - 0.1))
         if stats.get("n_over", 0) >= 2:
-            stop_at = max(MIN_STOP, STOP - max(0.0, stats.get("over", 0.0) - 0.3))
+            stop_at = max(min(MIN_STOP, base), base - max(0.0, stats.get("over", 0.0) - 0.3))
         return round(start_at, 2), round(stop_at, 2)
+
+    def early(self, mode: str) -> float:
+        """K short of the target where the start push hands over to hold: the setting, but no
+        more than the room was measured to rise after the push in this outdoor band."""
+        early = max(0.0, min(0.5, float(self.hold_early)))
+        stats = self.weather[mode].get(self.band() or "", {})
+        if stats.get("n_over", 0) >= 2:
+            early = min(early, max(0.0, float(stats.get("over", 0.0))))
+        return round(early, 2)
+
+    def stop_level(self, mode: str) -> int:
+        """Degrees past the unit's target sent in stop: the learned level, and always more than hold."""
+        return max(int(self.levels[mode]["stop"]), (self.hold_half(mode) + 1) // 2 + 1)
+
+    def hold_half(self, mode: str) -> int:
+        """The hold value in half degrees past the unit's target (setting minus what was learned)."""
+        return max(0, 2 * int(self.hold_offset) - int(self.levels[mode].get("hold_cut", 0)))
+
+    def _hold_degrees(self, mode: str, short: float) -> int:
+        half = self.hold_half(mode)
+        if half % 2 == 0:
+            return half // 2
+        # Whole degrees only: take the two neighbours in turn, by the room.
+        if short >= DITHER:
+            self._dither_low = True
+        elif short <= -DITHER:
+            self._dither_low = False
+        return (half - 1) // 2 if self._dither_low else (half + 1) // 2
 
     @property
     def last_mode(self) -> str | None:
@@ -293,10 +338,10 @@ class FollowMe:
                 level = ts - sign * (lv["start"] + boost)
                 base = min(math.floor(room), level) if sign > 0 else max(math.ceil(room), level)
             elif step == "stop":
-                level = ts + sign * lv["stop"]
+                level = ts + sign * self.stop_level(mode)
                 base = max(math.ceil(room), level) if sign > 0 else min(math.floor(room), level)
             else:
-                base = ts + sign * (lv["stop"] - 1)
+                base = ts + sign * self._hold_degrees(mode, short)
             value = float(base)
         if step != self.step:
             self._enter(step, room, now)
@@ -310,8 +355,12 @@ class FollowMe:
     def _next_step(self, short: float, now: float, mode: str) -> str:
         start_at, stop_at = self.thresholds(mode)
         last = self.step
+        early = self.early(mode)
         if last == "start":
-            return "start" if short > 0 else "hold"
+            return "start" if short > early else "hold"
+        if last == "hold" and early > 0:
+            # Handed over early: the room may sit there – push again only once it falls further.
+            start_at = max(start_at, round(early + 0.1, 2))
         if short >= start_at:
             if short >= FORCE or self._rested(now):
                 return "start"
@@ -349,6 +398,11 @@ class FollowMe:
 
     def _enter(self, step: str, room: float, now: float) -> None:
         left = self.step
+        if (left == "hold" and step == "start" and self._check == "hold" and self._mode in MODES
+                and now - self._check_since >= CHECKS["hold"]):
+            # It stood still in hold until the room needed a push: longer than a defrost (in
+            # frost the full check would outlast the minimum off time) – a stop in hold.
+            self._apply("hold", self._mode, self.outcome("hold", self._mode))
         if left == "hold" and not self._hold_stopped and self._mode in MODES and self.levels[self._mode]["strikes"]:
             self.levels[self._mode]["strikes"] = 0  # a hold that went normally: odd stops do not add up
             self._save()
@@ -590,12 +644,13 @@ class FollowMe:
         """What a check that runs out changes: (what, new value); None when nothing can."""
         lv = self.levels[mode]
         if cond == "stop":
-            if lv["stop"] < STOP_MAX:
-                return "stop_level", lv["stop"] + 1
+            if self.stop_level(mode) < STOP_MAX:
+                return "stop_level", self.stop_level(mode) + 1
             return None if lv["park"] else ("park", None)
         if cond == "hold":
-            if lv["stop"] > 1 and (lv["stop"] > lv["floor"] or lv["strikes"] > 0):
-                return "stop_level", lv["stop"] - 1
+            half = self.hold_half(mode)
+            if half > 0 and lv["strikes"] > 0:
+                return "hold_level", half - 1  # the second stop in hold in a row
             return None
         if cond == "start":
             return ("start_level", lv["start"] + 1) if lv["start"] < START_MAX else None
@@ -608,8 +663,8 @@ class FollowMe:
         if cond == "hold":
             self._hold_stopped = True
             self._seen.discard(True)  # once per stop in hold
-            if outcome is None and lv["stop"] > 1:
-                lv["strikes"] += 1  # the level was needed for a stop: lower only if it happens again
+            if outcome is None and self.hold_half(mode) > 0:
+                lv["strikes"] = 1  # one odd stop: lower the hold only if it happens again
                 self._save()
         if outcome is None:
             self._dismiss_check()
@@ -619,7 +674,8 @@ class FollowMe:
             self._boost = value
             _LOGGER.info("%s: the room does not come up – this Follow Me start pushed %d° further", self.entry.title, value)
             return
-        old = lv["stop"] if what == "stop_level" else lv["start"] if what == "start_level" else None
+        old = (self.stop_level(mode) if what == "stop_level" else lv["start"] if what == "start_level"
+               else self.hold_half(mode) if what == "hold_level" else None)
         if what == "park":
             lv["park"] = True
             verified["stop"] = False
@@ -630,12 +686,9 @@ class FollowMe:
             lv["stop"] = lv["floor"] = value
             lv["strikes"] = 0
             verified["stop"] = False
-        else:  # a stop in hold: one level lower
-            lv["stop"] = value
-            lv["floor"] = min(lv["floor"], value)
+        else:  # a stop in hold: the hold value half a degree closer to the target
+            lv["hold_cut"] = min(HOLD_CUT_MAX, lv.get("hold_cut", 0) + 1)
             lv["strikes"] = 0
-            lv["park"] = False
-            verified["stop"] = False
         self.history = [*self.history, {
             "at": datetime.fromtimestamp(time(), timezone.utc).isoformat(timespec="seconds"),
             "mode": mode, "check": cond, "change": what, "value": value, "from": old,
@@ -659,8 +712,9 @@ class FollowMe:
         if self.sent is not None and self._unit_target is not None:
             told = int(round(abs(self.sent - self._unit_target)))  # what the value sent says, in degrees
         return {"room": self._room, "target": self._target, "short": abs(self._short), "sent": self.sent,
-                "told": told, "power": self.unit.power(), "stop": self.levels[mode]["stop"],
+                "told": told, "power": self.unit.power(), "stop": self.stop_level(mode),
                 "start": self.levels[mode]["start"], "value": value, "old": old, "left": left,
+                "hold": self.hold_half(mode),
                 "cool": mode == "cool", "start_at": start_at, "stop_at": stop_at}
 
     def _follow_weather(self, now: float, mode: str, room: float, working: bool) -> None:
@@ -730,7 +784,8 @@ class FollowMe:
             band = self.band()
             stats = self.weather[mode].get(band or "", {})
             result.update(
-                stop_level=lv["stop"], start_level=lv["start"], park=lv["park"],
+                stop_level=self.stop_level(mode), start_level=lv["start"], park=lv["park"],
+                hold_offset=self.hold_half(mode) / 2, hold_early=self.early(mode),
                 stop_ok=self.verified[mode]["stop"], start_ok=self.verified[mode]["start"],
                 outdoor_band=None if band is None else f"{band}..{int(band) + BAND}",
                 start_at=start_at, stop_at=stop_at, overshoot=stats.get("over"), undershoot=stats.get("under"),

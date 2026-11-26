@@ -25,6 +25,7 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from . import learning_notice
+from .fan import FanGuard, lowest_fan
 from .followme import FollowMe, Steering
 from .const import (
     AWAY_STATES,
@@ -54,6 +55,17 @@ from .const import (
     COUNTDOWN_SENSOR_LOSS,
     COUNTDOWN_START_ALLOWED,
     COUNTDOWNS,
+    CONF_FAN_IDLE_POWER_W,
+    CONF_FAN_LOW_IDLE,
+    CONF_HOLD_EARLY,
+    CONF_HOLD_OFFSET,
+    CONF_STOP_MARGIN,
+    DEFAULT_FAN_IDLE_POWER_W,
+    DEFAULT_FAN_LOW_IDLE,
+    DEFAULT_HOLD_EARLY,
+    DEFAULT_HOLD_OFFSET,
+    DEFAULT_STOP_MARGIN,
+    OPENING_REDUCE_OFF,
     DEFAULT_COOL_TARGET,
     DEFAULT_HEAT_TARGET,
     DEFAULT_HYSTERESIS,
@@ -195,6 +207,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._started = False
         self.unit = self.hass.data[DOMAIN][f"{self.entry.entry_id}_unit"]
         self._fm = FollowMe(hass, entry, self.unit, self._write_if_added)
+        self._fan = FanGuard()
         self._steer_cache: tuple[Steering, float] | None = None
         self._park_retry_at = 0.0
         self._load_config()
@@ -245,6 +258,11 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._compensate = bool(cfg.get(CONF_SETPOINT_COMPENSATION, True))
         self._opening_reduce_to = cfg.get(CONF_OPENING_REDUCE_TO, DEFAULT_OPENING_REDUCE_TO)
         self._regulation = cfg.get(CONF_REGULATION, DEFAULT_REGULATION)
+        self._fm.hold_offset = int(round(float(cfg.get(CONF_HOLD_OFFSET, DEFAULT_HOLD_OFFSET))))
+        self._fm.hold_early = float(cfg.get(CONF_HOLD_EARLY, DEFAULT_HOLD_EARLY))
+        self._fm.stop_margin = float(cfg.get(CONF_STOP_MARGIN, DEFAULT_STOP_MARGIN))
+        self._fan.enabled = bool(cfg.get(CONF_FAN_LOW_IDLE, DEFAULT_FAN_LOW_IDLE))
+        self._fan.power_w = float(cfg.get(CONF_FAN_IDLE_POWER_W, DEFAULT_FAN_IDLE_POWER_W) or 0)
 
     @property
     def hvac_mode(self):
@@ -327,7 +345,27 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
+        self._fan.user_choice(fan_mode)
         await self._forward("set_fan_mode", {"fan_mode": fan_mode})
+
+    async def _guard_fan(self) -> None:
+        """Lowest fan speed while the compressor stands still in heat; the user's speed back after."""
+        pump = self.hass.states.get(self._heat_pump) if self._heat_pump else None
+        if pump is None or pump.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+        if pump.state == HVACMode.OFF.value:
+            self._fan.learn_standby(self.unit.power())
+        action = self._fan.decide(
+            time(), mode=pump.state, fan=pump.attributes.get("fan_mode"),
+            modes=pump.attributes.get("fan_modes"), compressor=self.unit.compressor_on(),
+            power=self.unit.power(), told_to_stop=self.stop_requested() and self._hvac_mode != HVACMode.OFF,
+        )
+        if action is None:
+            return
+        _LOGGER.info("%s: fan %s → %s", self.entry.title,
+                     "lowered while the compressor stands still" if action.why == "lower" else "set back", action.fan_mode)
+        self._last_command_reason = f"fan_{action.why}"
+        await self._forward("set_fan_mode", {"fan_mode": action.fan_mode})
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         await self._forward("set_swing_mode", {"swing_mode": swing_mode})
@@ -427,6 +465,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             "opening_open_accum_seconds": self._opening_open_accum,
             "opening_open_since_timestamp": self._opening_open_since,
             "opening_closed_since_timestamp": self._opening_closed_since,
+            **self._fan.attributes(),
             "sensor_available": self.current_temperature is not None,
             "sensor_loss_grace_seconds": self._sensor_loss_grace,
             "heat_target_saved": self._heat_target,
@@ -492,7 +531,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                     )
                 if self._opening_stage != OPENING_STAGE_OFF:
                     out[COUNTDOWN_OPENING_OFF] = future(
-                        self._opening_open_since + self._opening_off_delay - accum
+                        self._opening_open_since + self._opening_off_after() - accum
                     )
             elif self._opening_closed_since is not None and self._opening_stage != OPENING_STAGE_NONE:
                 out[COUNTDOWN_OPENING_RESUME] = future(
@@ -582,6 +621,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 self._pending_mode = HVACMode(pending_mode) if pending_mode else None
             except ValueError:
                 self._pending_mode = None
+            self._fan.restore(attrs)
             snapshot = attrs.get("disabled_thermostat_snapshot", {})
             if isinstance(snapshot, dict):
                 self._disabled_thermostats = snapshot
@@ -865,7 +905,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                     self._opening_stage = OPENING_STAGE_NONE
         if self._opening_episode_start is not None:
             open_total = self._opening_open_total()
-            if open_total >= self._opening_off_delay:
+            if open_total >= self._opening_off_after():
                 if self._opening_stage != OPENING_STAGE_OFF:
                     _LOGGER.info("%s: opening open %.0f min, switching off", self.entry.title, open_total / 60)
                 self._opening_stage = OPENING_STAGE_OFF
@@ -873,6 +913,12 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
                 _LOGGER.info("%s: opening open %.0f min, turning down", self.entry.title, open_total / 60)
                 self._opening_stage = OPENING_STAGE_MIN
         return self._opening_stage
+
+    def _opening_off_after(self) -> float:
+        """Seconds open before the unit is switched off: the turn-down delay when it turns off."""
+        if self._opening_reduce_to == OPENING_REDUCE_OFF:
+            return self._opening_min_delay
+        return self._opening_off_delay
 
     def _reset_opening_episode(self) -> None:
         """Forget the current door/window pause after an explicit user command.
@@ -969,6 +1015,10 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         """Forget what Follow Me learned (e.g. after a unit swap) and start over."""
         self._fm.reset()
 
+    def follow_me_step(self) -> str:
+        """The Follow Me step now (room/start/hold/stop)."""
+        return self._fm.step
+
     def stop_requested(self) -> bool:
         """The unit has been told to stop heating/cooling (Follow Me stop, neutral idle or off)."""
         if self._hvac_mode == HVACMode.OFF or self._opening_stage != OPENING_STAGE_NONE:
@@ -1031,6 +1081,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             return
         async with self._eval_lock:
             await self._evaluate_locked(reason)
+            await self._guard_fan()
 
     async def _evaluate_locked(self, reason: str) -> None:
         now = time()
@@ -1209,6 +1260,8 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
             self.async_write_ha_state()
             return
         if pump.state != HVACMode.OFF.value:
+            # Kept so the fan speed comes back with the heat once the door is closed.
+            self._fan.remember(pump.attributes.get("fan_mode"), lowest_fan(pump.attributes.get("fan_modes")))
             await self._apply_mode(HVACMode.OFF, "opening_off")
             notifier = self.hass.data.get(DOMAIN, {}).get(f"{self.entry.entry_id}_notifier")
             if notifier is not None:

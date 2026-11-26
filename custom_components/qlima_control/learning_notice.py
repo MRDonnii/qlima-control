@@ -28,6 +28,17 @@ def _told(c: dict, level: int) -> int:
     return c["told"] if isinstance(c.get("told"), int) and c["told"] > 0 else level
 
 
+def _hold(half) -> str:
+    """A hold value in half degrees, in words: '1°', 'skiftevis 1° og 0°'."""
+    try:
+        half = int(half)
+    except (TypeError, ValueError):
+        return "–"
+    if half % 2 == 0:
+        return f"{half // 2}°"
+    return f"skiftevis {(half + 1) // 2}° og {(half - 1) // 2}°"
+
+
 def _parked(c: dict) -> str:
     return "maksimum" if c.get("cool") else "minimum"
 
@@ -60,12 +71,12 @@ def _check_text(cond: str, what: str, c: dict) -> str | None:
         )
     if cond == "hold":
         return (
-            f"Anlægget har fået at vide, at rummet er {c['stop'] - 1}° {past} dets mål ({_n(c['sent'], 0)} °C), og "
-            f"skulle køre roligt videre. Men det er slukket, mens rummet er {_n(c['room'])} °C "
+            f"Anlægget har fået at vide, at rummet er {_hold(c.get('hold'))} {past} dets mål ({_n(c['sent'], 0)} °C), og "
+            f"skulle køre roligt videre på laveste blus. Men det er slukket, mens rummet er {_n(c['room'])} °C "
             f"(mål {_n(c['target'])} °C).\n\n"
-            f"**Hvorfor:** Det lærte stop-niveau ({c['stop']}°) er sandsynligvis en grad for højt – anlægget slukker "
-            "allerede en grad tidligere.\n\n"
-            f"**Hvad sker der:** Står det stadig stille om {c['left']} min, sænkes stop-niveauet til {c['value']}°."
+            "**Hvorfor:** Anlægget slukker allerede ved den værdi, i stedet for at skrue ned.\n\n"
+            f"**Hvad sker der:** Står det stadig stille om {c['left']} min, og sker det igen næste gang, får det "
+            f"fremover {_hold(c['value'])} {past} målet, når det skal holde varmen."
         )
     if cond == "start":
         return (
@@ -100,8 +111,9 @@ def _result_text(cond: str, what: str, c: dict) -> str:
             f"når rummet er {_n(c['stop_at'], 2).rstrip('0')} °C {past} målet."
         )
     return (
-        f"Anlægget slukkede, hvor det skulle køre roligt videre. Stop-niveauet er sænket fra {c['old']}° til "
-        f"{c['value']}°, så det kører roligt videre ved målet."
+        f"Anlægget slukkede to gange i træk, hvor det skulle køre roligt videre. Når rummet er ved målet, får det "
+        f"nu at vide, at rummet er {_hold(c['value'])} {past} dets mål (før {_hold(c['old'])}), så det skruer ned "
+        "i stedet for at slukke."
     )
 
 

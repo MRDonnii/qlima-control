@@ -114,6 +114,7 @@ async def _setup(hass, clock, room_temp: float = 19.0, **extra):
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Test pump",
+        minor_version=2,
         data={
             "name": "Test pump",
             "heat_pump": PUMP,
@@ -124,6 +125,8 @@ async def _setup(hass, clock, room_temp: float = 19.0, **extra):
             "min_run_minutes": 20,
             "min_off_minutes": 10,
             "opening_reduce_to": extra.get("reduce_to", "minimum"),
+            "hold_offset": extra.get("hold_offset", 1),
+            "hold_early": extra.get("hold_early", 0.2),
         },
     )
     entry.add_to_hass(hass)
@@ -551,3 +554,46 @@ async def test_starts_just_below_target_and_stops_half_a_degree_above(hass, cloc
         await entity._evaluate("periodic")
         await hass.async_block_till_done()
         assert entity.extra_state_attributes["active_mode"] == expected, temp
+
+
+async def test_door_switches_off_after_the_first_delay_and_comes_back(hass, clock):
+    """1.11 default: no 17 °C with the fan blowing – off after 5 min, back as it was after 10 min closed."""
+    pump, entity = await _setup(hass, clock, reduce_to="off")
+    await entity.async_set_fan_mode("high")
+    await hass.async_block_till_done()
+    target_before = pump.target
+    await _set_door(hass, "on")
+    await _tick(hass, entity, clock, 4)
+    assert pump.state == "heat"
+    await _tick(hass, entity, clock, 1.1)
+    assert entity.extra_state_attributes["opening_stage"] == "off"
+    assert pump.state == "off"
+    assert ("temperature", 16.0) not in pump.calls and ("temperature", 17.0) not in pump.calls
+    assert entity.hvac_mode == "heat"  # our own OFF is not a remote stop
+    assert entity.extra_state_attributes["fan_user_choice"] == "high"
+    pump.fan = "auto"  # the unit forgot its fan speed while off
+    pump.publish()
+    await hass.async_block_till_done()
+    await _set_door(hass, "off")
+    await _tick(hass, entity, clock, 10.5)
+    await _tick(hass, entity, clock, 0.5)
+    assert pump.state == "heat"
+    assert pump.target == target_before
+    assert pump.fan == "high"
+    assert entity.extra_state_attributes["fan_user_choice"] is None
+
+
+async def test_old_default_turn_down_becomes_off(hass):
+    """The migration: the old default 'setpoint' becomes 'off', a chosen 'minimum' stays."""
+    from custom_components.qlima_control import async_migrate_entry
+
+    old = MockConfigEntry(domain=DOMAIN, title="a", data={"opening_reduce_to": "setpoint"}, minor_version=1)
+    chosen = MockConfigEntry(domain=DOMAIN, title="b", data={}, options={"opening_reduce_to": "minimum"}, minor_version=1)
+    unset = MockConfigEntry(domain=DOMAIN, title="c", data={}, minor_version=1)
+    for entry in (old, chosen, unset):
+        entry.add_to_hass(hass)
+        assert await async_migrate_entry(hass, entry)
+        assert entry.minor_version == 2
+    assert old.options["opening_reduce_to"] == "off"
+    assert chosen.options["opening_reduce_to"] == "minimum"
+    assert unset.options["opening_reduce_to"] == "off"

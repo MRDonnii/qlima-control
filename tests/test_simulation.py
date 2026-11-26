@@ -205,6 +205,9 @@ async def _plant(hass, esp_device, clock, *, room: float, outdoor: float, comp: 
     if mode == "heat_cool":
         sim.mode = "heat"
     extra.setdefault("opening_sensors", [])
+    # The older simulations pin the 1.10 hold (no offset); the 1.11 hold has its own below.
+    extra.setdefault("hold_offset", 0)
+    extra.setdefault("hold_early", 0)
     entry = await _setup(hass, esp_device, heat_target=target, cool_target=cool_target, regulation="unit", **extra)
     entity = hass.data[DOMAIN][entry.entry_id]
     plant = Plant(hass, entity, sim, Room(room, outdoor), clock, noise=noise, lag=lag)
@@ -411,7 +414,7 @@ async def test_defrosts_do_not_teach_a_wrong_level(hass, esp_device, sim_clock):
     await plant.run(12 * 60)
     stats = plant.hass.data[DOMAIN][f"{plant.entity.entry.entry_id}_stats"]
     assert stats.data.get("defrosts_day", 0) >= 5
-    assert _levels(plant) == {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False}
+    assert _levels(plant) == {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False, "hold_cut": 0}
     low, high = plant.band(6 * 60)
     assert low >= 21.3 and high <= 22.6, (low, high)
 
@@ -577,35 +580,24 @@ async def test_a_remote_control_target_is_held_then_released(hass, esp_device, s
 # ---------------------------------------------------------------- correcting and keeping
 
 
-async def test_a_too_high_stop_level_comes_down(hass, esp_device, sim_clock):
-    """Restored stop level 4 (never needed for a stop) on a unit that needs 1: it stops in hold → down."""
-    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0)
-    _levels(plant).update(stop=4, floor=1)
+async def test_a_stop_level_is_no_longer_lowered_by_a_stop_in_hold(hass, esp_device, sim_clock):
+    """1.11: hold no longer uses the stop level (that made it flip between 2 and 3 on the garage).
+    A stop in hold brings the hold closer instead; the stop level stays."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0, hold_offset=1, hold_early=0.2)
+    _levels(plant).update(stop=4, floor=4)
     await plant.run(10 * 60)
-    assert _levels(plant)["stop"] == 1
+    assert _levels(plant)["stop"] == 4
+    assert not any(h["change"] == "stop_level" for h in plant.entity._fm.history)
     low, high = plant.band(4 * 60)
-    assert low >= 21.6 and high <= 22.6, (low, high)
-
-
-async def test_a_level_a_stop_needed_takes_two_odd_stops_to_lower(hass, esp_device, sim_clock):
-    """Stop level 2 that a stop needed (floor 2) on a unit that needs 1: lowered on the second
-    stop in hold – never raised again in between (no flip-flopping)."""
-    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0)
-    _levels(plant).update(stop=2, floor=2)
-    await plant.run(12 * 60)
-    assert _levels(plant)["stop"] == 1
-    changes = [(h["check"], h["change"], h["value"]) for h in plant.entity._fm.history]
-    assert changes == [("hold", "stop_level", 1)], changes
-    low, high = plant.band(4 * 60)
-    assert low >= 21.6 and high <= 22.6, (low, high)
+    assert low >= 21.5 and high <= 22.6, (low, high)
 
 
 async def test_the_learning_is_kept_in_the_state_and_over_a_restart(hass, esp_device, sim_clock):
     from homeassistant.core import State
     from pytest_homeassistant_custom_component.common import mock_restore_cache
 
-    levels = {"heat": {"stop": 2, "start": 1, "floor": 2, "strikes": 0, "park": False},
-              "cool": {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False}}
+    levels = {"heat": {"stop": 2, "start": 1, "floor": 2, "strikes": 0, "park": False, "hold_cut": 0},
+              "cool": {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False, "hold_cut": 0}}
     mock_restore_cache(hass, [State("climate.test", "heat", {
         "follow_me_levels": levels, "follow_me_echo": True,
         "follow_me_history": [{"at": "2026-10-18T12:58:00+00:00", "mode": "heat", "check": "stop",
@@ -634,7 +626,7 @@ async def test_what_1_8_learned_is_carried_over(hass, esp_device, sim_clock):
         "heat_target_saved": 22, "cool_target_saved": 25,
     })])
     plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=5.0, unit={"stop_at": 2.0})
-    assert _levels(plant) == {"stop": 2, "start": 1, "floor": 2, "strikes": 0, "park": False}
+    assert _levels(plant) == {"stop": 2, "start": 1, "floor": 2, "strikes": 0, "park": False, "hold_cut": 0}
     assert _levels(plant, "cool")["stop"] == 1
     assert plant.entity._fm.verified["heat"] == {"stop": True, "start": True}
     await plant.run(6 * 60)
@@ -752,7 +744,7 @@ async def test_follow_me_that_never_arrives_teaches_nothing(hass, esp_device, si
     plant = await _plant(hass, esp_device, sim_clock, room=20.0, outdoor=5.0, comp=1)
     plant.ir_ok = False
     await plant.run(8 * 60)
-    assert _levels(plant) == {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False}
+    assert _levels(plant) == {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False, "hold_cut": 0}
     assert plant.entity._fm.history == []
     assert plant.entity.follow_me_learning()["state"] == "no_follow_me"
     assert f"qlima_control_no_echo_{plant.entity.entry.entry_id}" in notices.shown
@@ -973,3 +965,47 @@ async def test_what_is_learned_shows_while_off(hass, esp_device, sim_clock):
     await plant.entity.async_set_hvac_mode("off")
     info = plant.entity.follow_me_learning()
     assert info["state"] == "off" and info["mode"] == "heat" and info["stop_level"] == 2 and info["start_level"] == 1
+
+
+# ---------------------------------------------------------------- 1.11 hold: keep the compressor on its minimum
+
+
+def _new_hold(**extra):
+    return {"hold_offset": 1, "hold_early": 0.2, **extra}
+
+
+async def test_hold_plus_one_keeps_a_garage_like_unit_running(hass, esp_device, sim_clock):
+    """A unit that stops only when told +2 (the garage): hold +1 turns it down, it keeps running."""
+    plant = await _plant(hass, esp_device, sim_clock, room=20.0, outdoor=3.0, unit={"stop_at": 2.0}, **_new_hold())
+    await plant.run(4 * 60)
+    await plant.run(6 * 60)
+    fm = plant.entity._fm
+    assert any(t[4] == "hold" for t in plant.window(6 * 60))
+    running = sum(1 for t in plant.window(6 * 60) if t[2])
+    assert running >= 0.9 * 6 * 60  # the compressor stays on (no 10-min cold-air stops)
+    low, high = plant.band(6 * 60)
+    assert low >= 21.6 and high <= 22.5, (low, high)
+    assert fm.hold_half("heat") == 2 and _levels(plant)["hold_cut"] == 0
+    if fm.step == "hold":
+        assert fm.sent == plant.unit.target + 1
+
+
+async def test_a_unit_that_stops_at_plus_one_gets_a_softer_hold(hass, esp_device, sim_clock):
+    """It stops in hold at +1: after two such stops in a row the hold becomes +1/+0 in turn."""
+    plant = await _plant(hass, esp_device, sim_clock, room=21.0, outdoor=8.0, **_new_hold())
+    await plant.run(10 * 60)
+    changes = [(h["check"], h["change"], h["value"]) for h in plant.entity._fm.history]
+    assert changes and changes[0] == ("hold", "hold_level", 1), changes
+    assert not any(c[1] == "stop_level" and c[0] == "hold" for c in changes)
+    assert plant.entity._fm.hold_half("heat") <= 1
+    low, high = plant.band(4 * 60)
+    assert low >= 21.5 and high <= 22.6, (low, high)
+
+
+@pytest.mark.parametrize("comp", [0, 1, 2])
+async def test_new_hold_heats_up_and_holds(hass, esp_device, sim_clock, comp):
+    plant = await _plant(hass, esp_device, sim_clock, room=18.0, outdoor=5.0, comp=comp, **_new_hold())
+    await plant.run(12 * 60)
+    low, high = plant.band(6 * 60)
+    assert low >= 21.5 and high <= 22.6, (low, high)
+    assert plant.starts(6 * 60) <= 10

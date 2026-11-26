@@ -55,7 +55,9 @@
               "opening_resume_delay_minutes": "Resume after closed for",
               "opening_reduce_to": "Turn down to"
             },
-            "data_description": {}
+            "data_description": {
+              "opening_reduce_to": "Switch off: the unit is switched off once a door or window has been open for the first delay, and starts again with the same settings once it has been closed a while."
+            }
           },
           "control": {
             "name": "Control",
@@ -69,11 +71,21 @@
               "manual_override_minutes": "Manual override (remote) lasts",
               "setpoint_compensation": "Setpoint compensation",
               "presence_entity": "Presence (person, group, alarm)",
-              "away_setback": "Away setback"
+              "away_setback": "Away setback",
+              "hold_offset": "At the target: tell the unit the room is this much warmer",
+              "hold_early": "Turn down this much before the target",
+              "stop_margin": "Stop when the room is this much over the target",
+              "fan_low_when_idle": "Lowest fan while the unit is not heating",
+              "fan_idle_power_w": "The fan runs above (W)"
             },
             "data_description": {
               "setpoint_compensation": "Not needed with Follow Me.",
-              "presence_entity": "Away lowers the heat target (and raises the cool target)."
+              "presence_entity": "Away lowers the heat target (and raises the cool target).",
+              "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. If it stops anyway, less is learned.",
+              "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
+              "stop_margin": "If the room still gets too warm, the unit is told to stop.",
+              "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",
+              "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off)."
             }
           },
           "notifications": {
@@ -180,7 +192,7 @@
           "opening_reduce_to": "Turn down to"
         },
         "data_description": {
-          "opening_reduce_to": "When the unit regulates itself (Follow Me), an open door/window always turns it down to the minimum."
+          "opening_reduce_to": "Switch off: the unit is switched off once a door or window has been open for the first delay, and starts again with the same settings once it has been closed a while."
         }
       },
       "control": {
@@ -196,12 +208,22 @@
           "manual_override_minutes": "Manual override (remote) lasts",
           "setpoint_compensation": "Setpoint compensation",
           "presence_entity": "Presence (person, group, alarm)",
-          "away_setback": "Away setback"
+          "away_setback": "Away setback",
+          "hold_offset": "At the target: tell the unit the room is this much warmer",
+          "hold_early": "Turn down this much before the target",
+          "stop_margin": "Stop when the room is this much over the target",
+          "fan_low_when_idle": "Lowest fan while the unit is not heating",
+          "fan_idle_power_w": "The fan runs above (W)"
         },
         "data_description": {
           "regulation": "The unit: it gets the room temperature as Follow Me and holds the target itself (no on/off cycling, no idling at 17 °C). The thermostat: on/off with hysteresis and a neutral idle at the lowest target. The unit falls back to the thermostat while Follow Me is off.",
           "setpoint_compensation": "Not needed with Follow Me.",
-          "presence_entity": "Away lowers the heat target (and raises the cool target)."
+          "presence_entity": "Away lowers the heat target (and raises the cool target).",
+          "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. If it stops anyway, less is learned.",
+          "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
+          "stop_margin": "If the room still gets too warm, the unit is told to stop.",
+          "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",
+          "fan_idle_power_w": "0 = automatic (a little above what the unit uses when switched off)."
         }
       },
       "notifications": {
@@ -591,6 +613,9 @@
       },
       "turbo": {
         "name": "Turbo 30 min"
+      },
+      "fan_low_when_idle": {
+        "name": "Lowest fan while not heating"
       }
     },
     "number": {
@@ -634,6 +659,7 @@
     },
     "opening_reduce_to": {
       "options": {
+        "off": "Switch the unit off",
         "setpoint": "The target (keeps the room)",
         "minimum": "The minimum (17 °C)"
       }

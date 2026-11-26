@@ -167,7 +167,7 @@ async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
     """Whole-degree Follow Me steered at 0.1 K: target −1 until the room reaches the
     target, then the target (modulate), target +1 from +0.3 K (off before +0.5) until
     0.2 K below again – with minimum run and off times against short cycling."""
-    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0, hold_offset=0, hold_early=0)  # the 1.10 hold
     await _follow_me(hass, entity, clock)
     assert pump.target == 22
 
@@ -206,7 +206,7 @@ async def test_follow_me_is_steered_while_the_unit_regulates(hass, clock):
 
 async def test_follow_me_shows_the_whole_shortfall_far_from_the_target(hass, clock):
     """Target 30 with the room at 22.7: the unit must see 22, not 29, or it barely runs."""
-    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0, hold_offset=0, hold_early=0)  # the 1.10 hold
     await _follow_me(hass, entity, clock)
     await entity.async_set_temperature(temperature=30)
     pump.target = 30
@@ -232,3 +232,38 @@ async def test_follow_me_is_the_room_when_the_thermostat_regulates(hass, clock):
     await _follow_me(hass, entity, clock, on=False)
     assert entity.follow_me_value(21.6) == 21.6
     assert entity.extra_state_attributes["follow_me_step"] == "room"
+
+
+async def test_hold_sends_one_degree_and_starts_early(hass, clock):
+    """1.11 defaults: the start push ends 0.2 K short, hold is the unit's target +1 (it turns
+    down instead of stopping), stop is at least one degree more than hold."""
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    await _follow_me(hass, entity, clock)
+    fm = entity._fm
+
+    def check(room, sent, step):
+        assert entity.follow_me_value(room) == sent, room
+        assert entity.extra_state_attributes["follow_me_step"] == step, room
+
+    check(22.0, 23, "hold")
+    check(21.7, 21, "start")    # 0.3 K short (0.2 + 0.1 after an early hand-over): start
+    check(21.75, 21, "start")
+    check(21.8, 23, "hold")     # 0.2 K short: hand over early, +1
+    check(21.75, 23, "hold")    # still running at its minimum: no new push yet
+    clock.advance(21)
+    check(22.3, 24, "stop")     # overshoot guard: stop sends more than hold
+    assert fm.stop_level("heat") == 2 and fm.hold_half("heat") == 2
+    info = entity.follow_me_learning()
+    assert info["hold_offset"] == 1.0 and info["hold_early"] == 0.2
+
+
+async def test_a_softer_hold_takes_turns_by_the_room(hass, clock):
+    """Learned half a degree down: +1 above the target, +0 once 0.1 K below."""
+    pump, entity = await _setup_pump(hass, clock, room_temp=22.0)
+    await _follow_me(hass, entity, clock)
+    entity._fm.levels["heat"]["hold_cut"] = 1
+    assert entity.follow_me_value(22.1) == 23
+    assert entity.follow_me_value(22.0) == 23   # in between: keeps the last
+    assert entity.follow_me_value(21.9) == 22   # 0.1 K below: +0
+    assert entity.follow_me_value(22.0) == 22
+    assert entity.follow_me_value(22.1) == 23

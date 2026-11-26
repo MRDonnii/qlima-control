@@ -82,6 +82,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unloaded
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """1.11: an open door switches the unit off instead of turning it down while it blows.
+
+    "setpoint" was the old default; with Follow Me it already meant the minimum target with
+    the fan running, which is what blew cold air. It becomes "off"; "minimum" chosen on
+    purpose is kept.
+    """
+    if entry.version == 1 and entry.minor_version < 2:
+        options = dict(entry.options)
+        if {**entry.data, **options}.get("opening_reduce_to", "setpoint") == "setpoint":
+            options["opening_reduce_to"] = "off"
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    return True
+
+
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """The entry is deleted: its stored statistics and Follow Me learning go with it."""
     from homeassistant.helpers.storage import Store
