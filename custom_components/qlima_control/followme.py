@@ -95,6 +95,7 @@ LEAD_MIN = 6.0        # min: the unit takes about this long to turn down – the
 LEAD_MAX = 1.0        # K: … but never more than this short of the target
 SLOPE_SPAN = 8 * 60   # s of room readings the rise rate is taken over (at least 3 min)
 RISING = 0.02         # K/min: the room counts as rising (hold stays on its full value, no soft start)
+AGE_MAX = 6 * 60      # s: a room reading this old is not extrapolated further (sensors report every few minutes)
 SOFT_MILD = 5.0       # °C outdoor: above it a soft start asks for half a degree, at or below a whole one
 SOFT_START = 0.5      # K: with half degrees, a start this close to the target (compressor running) asks for only half a degree
 HOLD_BAND = 0.1       # K: with half degrees, hold sends +0 this far below the target, the full hold value this far above
@@ -169,6 +170,8 @@ class FollowMe:
         self._hold_band = 0  # half-degree hold: -1 room below target, 0 at it, 1 above
         self._rooms: list[tuple[float, float]] = []  # (time, room) for the rise rate
         self._rise: float | None = None  # K/min towards the target side (heat: rising > 0)
+        self._room_seen: float | None = None  # last room value and when it last changed
+        self._room_at = 0.0
         # Learned (kept in the store).
         self.levels = {m: _default_levels() for m in MODES}
         self.verified = {m: {"stop": False, "start": False} for m in MODES}
@@ -316,11 +319,18 @@ class FollowMe:
 
     def early(self, mode: str) -> float:
         """K short of the target where the start push hands over to hold: the setting, but no
-        more than the room was measured to rise after the push in this outdoor band."""
+        more than the room was measured to rise after the push in this outdoor band – with half
+        degrees, at least that rise (up to LEAD_MAX)."""
         early = max(0.0, min(0.5, float(self.hold_early)))
         stats = self.weather[mode].get(self.band() or "", {})
         if stats.get("n_over", 0) >= 2:
-            early = min(early, max(0.0, float(stats.get("over", 0.0))))
+            over = max(0.0, float(stats.get("over", 0.0)))
+            if self.unit.half_degrees():
+                # Hold in half degrees can take the coast: hand over as far short of the target as
+                # the room was measured to rise after the push (a slow room sensor included).
+                early = max(early, min(LEAD_MAX, over))
+            else:
+                early = min(early, over)
         return round(early, 2)
 
     def stop_level(self, mode: str) -> int:
@@ -402,6 +412,8 @@ class FollowMe:
             self._short = short
             slope = self._slope(now, room)
             self._rise = None if slope is None else slope * sign
+            if room != self._room_seen:
+                self._room_seen, self._room_at = room, now
             step = self._next_step(short, now, mode)
             lv = self.levels[mode]
             ts = steering.unit_target
@@ -443,7 +455,10 @@ class FollowMe:
         if last == "start":
             if self.unit.half_degrees() and self._rise is not None and self._rise > RISING:
                 # Rising fast: the unit needs LEAD_MIN to turn down, so hand over that much rise early.
+                # The room sensor reports every few minutes: count the rise since its last reading too.
                 early = max(early, min(LEAD_MAX, self._rise * LEAD_MIN))
+                age = min(AGE_MAX, max(0.0, now - self._room_at)) / 60
+                short = short - self._rise * age
             return "start" if short > early else "hold"
         if last == "hold" and short > 0 and self.unit.half_degrees() and self._rise is not None and self._rise > RISING:
             return "hold"  # handed over early while the room rises: let it coast up to the target

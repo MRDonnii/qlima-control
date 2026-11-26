@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.2 (firmware 1.5.0)
+Change by Claude AI – the start step hands over to hold in time, also with a slow room sensor (with half degrees).
+- **Learned coast decides the handover.** How far the room was measured to rise after the start step ended (per 5 °C outdoor band) is now where the start hands over, up to 1 K short of the target – before it could only make the handover later. Seen on the garage: the room sensor reports every ~5 min, the handover came at 23.44 and the room went on to 23.88.
+- **The rise since the last room reading counts.** While the room rises, the time since its sensor last changed is extrapolated with the rise rate when the handover is judged.
+- Units without the ESP's half-degree switch work as before.
+
 ## 1.13.1 (firmware 1.5.0)
 Change by Claude AI.
 - **Soft start works in frost.** At or below 5 °C outdoor the soft start near the target asks for a whole degree below the unit's target instead of half a degree (on the garage at 1 °C outdoor half a degree gave 1.2 kW and the room kept falling). Above 5 °C it stays at half a degree. It is not used while the room falls or rises.
