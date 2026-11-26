@@ -55,6 +55,17 @@ number:
     optimistic: true
     restore_value: false
 
+  - platform: template
+    id: probe_fm_f
+    name: Probe Follow Me °F
+    entity_category: config
+    min_value: 60
+    max_value: 85
+    step: 1
+    initial_value: 72
+    optimistic: true
+    restore_value: false
+
 switch:
   - platform: template
     name: Follow Me via USB
@@ -78,3 +89,14 @@ button:
     entity_category: diagnostic
     on_press:
       - lambda: 'id(ac).do_follow_me_uart(id(probe_fm_value).state);'
+
+# Fahrenheit-test: Follow Me via IR i hele °F (1 °F = 0,56 K). Slå "Follow Me" fra under testen,
+# så den almindelige °C-værdi ikke overskriver, og se hvad "Indetemperatur anlæg" melder tilbage.
+  - platform: template
+    name: Probe send Follow Me i °F (IR)
+    entity_category: diagnostic
+    on_press:
+      - midea_ac.follow_me:
+          temperature: !lambda 'return id(probe_fm_f).state;'
+          use_fahrenheit: true
+          beeper: false
