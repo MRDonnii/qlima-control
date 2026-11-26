@@ -1,0 +1,80 @@
+# Qlima Control – TESTPAKKE (kun til undersøgelse, ikke til almindelig brug).
+#
+# Spørger anlægget over USB-stikket om ting, Qlima Control ikke bruger endnu, og viser de
+# rå svar. Den læser kun – den tænder, slukker og skifter ikke noget:
+#   - B5 (hvad anlægget kan), side 0 og 1, med og uden besked-id
+#   - B1-egenskaber: effektgrænse (rate select), stille udedel, iECO, luftfugtighed, bipper, energi
+#   - servicedata gruppe 1, nu med besked-id som i msmart-ng
+# Desuden kan Follow Me sendes over USB-stikket i halve grader i stedet for via IR
+# (kontakten "Follow Me via USB", slået fra som standard).
+#
+# Tilføj efter hovedpakken (ref på testgrenen):
+#   files: [esphome/qlima-control.yaml, esphome/qlima-control-probe.yaml]
+
+text_sensor:
+  - platform: template
+    name: Probe B5 side 0
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(0);'
+  - platform: template
+    name: Probe B5 side 1
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(1);'
+  - platform: template
+    name: Probe B1 egenskaber
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(2);'
+  - platform: template
+    name: Probe gruppe 1
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(3);'
+  - platform: template
+    name: Probe Follow Me USB
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(4);'
+  - platform: template
+    name: Probe B5 uden id
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(ac).get_probe(5);'
+
+number:
+  - platform: template
+    id: probe_fm_value
+    name: Probe Follow Me værdi
+    entity_category: config
+    min_value: 10
+    max_value: 30
+    step: 0.5
+    initial_value: 22
+    optimistic: true
+    restore_value: false
+
+switch:
+  - platform: template
+    name: Follow Me via USB
+    id: probe_uart_fm
+    entity_category: config
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - lambda: 'id(ac).set_uart_follow_me(true);'
+    turn_off_action:
+      - lambda: 'id(ac).set_uart_follow_me(false);'
+
+button:
+  - platform: template
+    name: Probe spørg anlægget
+    entity_category: diagnostic
+    on_press:
+      - lambda: 'id(ac).do_probe_uart();'
+  - platform: template
+    name: Probe send Follow Me via USB
+    entity_category: diagnostic
+    on_press:
+      - lambda: 'id(ac).do_follow_me_uart(id(probe_fm_value).state);'

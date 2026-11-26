@@ -4,6 +4,8 @@
 
 // MideaUART
 #include <Appliance/AirConditioner/AirConditioner.h>
+#include <string>
+#include <vector>
 
 #include "appliance_base.h"
 #include "esphome/components/sensor/sensor.h"
@@ -54,6 +56,14 @@ class AirConditioner final : public ApplianceBase<dudanov::midea::ac::AirConditi
   /* ############### */
 
   void do_follow_me(float temperature, bool use_fahrenheit, bool beeper = false);
+
+  /* Qlima Control probe (esphome/qlima-control-probe.yaml): read-only UART questions and Follow Me over UART. */
+  void do_probe_uart();
+  void do_follow_me_uart(float temperature);
+  void set_uart_follow_me(bool state) { this->uart_follow_me_ = state; }
+  bool get_uart_follow_me() const { return this->uart_follow_me_; }
+  std::string get_probe(uint8_t slot) const { return slot < PROBE_SLOTS ? this->probe_[slot] : std::string(); }
+  static const uint8_t PROBE_SLOTS = 6;
   void do_display_toggle();
   void do_swing_step();
   void do_beeper_on() { this->set_beeper_feedback(true); }
@@ -108,6 +118,9 @@ class AirConditioner final : public ApplianceBase<dudanov::midea::ac::AirConditi
   Sensor *error_code_sensor_{nullptr};
   binary_sensor::BinarySensor *filter_alert_sensor_{nullptr};
   text_sensor::TextSensor *telemetry_groups_sensor_{nullptr};
+  void probe_store_(uint8_t slot, const char *label, const uint8_t *data, uint8_t size);
+  bool uart_follow_me_{false};
+  std::string probe_[PROBE_SLOTS];
 };
 
 }  // namespace esphome::midea::ac

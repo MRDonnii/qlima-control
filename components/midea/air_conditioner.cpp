@@ -352,9 +352,68 @@ void AirConditioner::dump_config() {
   this->dump_traits_(Constants::TAG);
 }
 
+/* PROBE */
+
+// Slots: 0 B5 page 0, 1 B5 page 1, 2 B1 properties, 3 group 1 with message ID, 4 Follow Me over UART, 5 B5 without ID.
+void AirConditioner::probe_store_(uint8_t slot, const char *label, const uint8_t *data, uint8_t size) {
+  std::string hex;
+  char b[4];
+  for (uint8_t i = 0; i < size; i++) {
+    snprintf(b, sizeof(b), "%02X ", data[i]);
+    hex += b;
+  }
+  ESP_LOGI(Constants::TAG, "Probe %s: %s", label, size ? hex.c_str() : "no answer");
+  std::string text = size ? hex : std::string("intet svar");
+  if (text.size() > 250)
+    text.resize(250);
+  this->probe_[slot] = text;
+}
+
+void AirConditioner::do_probe_uart() {
+  using dudanov::midea::FrameData;
+  struct Q {
+    uint8_t slot;
+    const char *label;
+    std::vector<uint8_t> payload;
+    bool add_id;
+  };
+  const Q queries[] = {
+      {0, "B5 page 0", {0xB5, 0x01, 0x00}, true},
+      {1, "B5 page 1", {0xB5, 0x01, 0x01, 0x01}, true},
+      // Rate select, outdoor silent, iECO, indoor humidity, buzzer, energy
+      {2, "B1 properties", {0xB1, 0x06, 0x48, 0x00, 0xCD, 0x00, 0xE3, 0x00, 0x15, 0x00, 0x1A, 0x00, 0x16, 0x02}, true},
+      {3, "group 1 with ID", {0x41, 0x21, 0x01, 0x41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, true},
+      {5, "B5 page 0 without ID", {0xB5, 0x01, 0x00}, false},
+  };
+  for (const auto &q : queries) {
+    const uint8_t slot = q.slot;
+    const char *label = q.label;
+    this->probe_[slot] = "venter";
+    this->base_.queryRaw(
+        q.payload, [this, slot, label](const FrameData &d) { this->probe_store_(slot, label, d.data(), d.size()); },
+        [this, slot, label]() { this->probe_store_(slot, label, nullptr, 0); }, q.add_id);
+  }
+}
+
+void AirConditioner::do_follow_me_uart(float temperature) {
+  using dudanov::midea::FrameData;
+  if (!std::isfinite(temperature)) {
+    ESP_LOGW(Constants::TAG, "Follow me (UART) requires a finite temperature, got: %f", temperature);
+    return;
+  }
+  ESP_LOGI(Constants::TAG, "Follow me over UART: %.1f °C", roundf(temperature * 2.0f) / 2.0f);
+  this->base_.sendFollowMe(
+      temperature, [this](const FrameData &d) { this->probe_store_(4, "Follow Me UART", d.data(), d.size()); },
+      [this]() { this->probe_store_(4, "Follow Me UART", nullptr, 0); });
+}
+
 /* ACTIONS */
 
 void AirConditioner::do_follow_me(float temperature, bool use_fahrenheit, bool beeper) {
+  if (this->uart_follow_me_ && !use_fahrenheit) {
+    this->do_follow_me_uart(temperature);
+    return;
+  }
 #ifdef USE_REMOTE_TRANSMITTER
   // Check if temperature is finite (not NaN or infinite)
   if (!std::isfinite(temperature)) {
