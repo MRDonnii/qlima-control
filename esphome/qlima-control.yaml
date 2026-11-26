@@ -28,14 +28,14 @@
 esphome:
   project:
     name: mrdonnii.qlima-control
-    version: "1.4.5"
+    version: "1.4.5-probe"
   includes:
     - <esp_wifi.h>   # sendestyrken hæves efter tilslutning (se wifi:)
 
 external_components:
-  - source: github://MRDonnii/qlima-control@main
+  - source: github://MRDonnii/qlima-control@probe-uart
     components: [midea]
-    refresh: 1h
+    refresh: 0s
 
 api:
   actions:
