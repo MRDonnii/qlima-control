@@ -95,6 +95,7 @@ LEAD_MIN = 6.0        # min: the unit takes about this long to turn down – the
 LEAD_MAX = 1.0        # K: … but never more than this short of the target
 SLOPE_SPAN = 8 * 60   # s of room readings the rise rate is taken over (at least 3 min)
 RISING = 0.02         # K/min: the room counts as rising (hold stays on its full value, no soft start)
+SOFT_MILD = 5.0       # °C outdoor: above it a soft start asks for half a degree, at or below a whole one
 SOFT_START = 0.5      # K: with half degrees, a start this close to the target (compressor running) asks for only half a degree
 HOLD_BAND = 0.1       # K: with half degrees, hold sends +0 this far below the target, the full hold value this far above
 DITHER = 0.1           # K: a half-degree hold uses the lower degree below target − this, the higher above target + this
@@ -410,12 +411,15 @@ class FollowMe:
                 # whole shortfall – and at least its start level.
                 level = ts - sign * (lv["start"] + boost)
                 base = min(math.floor(room), level) if sign > 0 else max(math.ceil(room), level)
-                soft = ts - sign * 0.5
+                # Close to the target with the compressor running (back from hold or stop): ask
+                # for a little, so it does not run flat out up to the target and past it – half a
+                # degree in mild weather, a whole one in frost (half gave 1.2 kW at 1 °C outdoor
+                # on the garage and the room kept falling). Not while the room falls.
+                outdoor = self.unit.outdoor()
+                soft = ts - sign * (0.5 if outdoor is not None and outdoor > SOFT_MILD else 1.0)
                 if (self.unit.half_degrees() and not boost and short < SOFT_START
-                        and (self._rise is None or self._rise <= RISING)
+                        and (self._rise is None or abs(self._rise) <= RISING)
                         and self._compressor(now) and fahrenheit_echo(soft) == soft):
-                    # Close to the target with the compressor running (back from hold): ask
-                    # for half a degree, so it does not run flat out up to the target and past it.
                     base = soft
             elif step == "stop":
                 level = ts + sign * self.stop_level(mode)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.1 (firmware 1.5.0)
+Change by Claude AI.
+- **Soft start works in frost.** At or below 5 °C outdoor the soft start near the target asks for a whole degree below the unit's target instead of half a degree (on the garage at 1 °C outdoor half a degree gave 1.2 kW and the room kept falling). Above 5 °C it stays at half a degree. It is not used while the room falls or rises.
+
 ## 1.13.0 (firmware 1.5.0)
 Change by Claude AI – Follow Me in half degrees. Nothing here switches a unit on or off, or between heat pump and district heating.
 - **Firmware 1.5.0: Follow Me in half degrees.** New switch *Follow Me i halve grader* (on by default). The ESP sends Follow Me over IR in whole °F, which a Qlima S 52xx rounds to the nearest 0.5 °C (tested on the garage 2026-11-26: 71 °F → 21.5, 72 → 22.0, 73 → 23.0, 74 → 23.5), instead of whole °C. Home Assistant, the target and the card stay in °C. Whole degrees give the same value as before; 22.5 and 27.5 cannot be reached with a whole °F, so these are sent as 22 and 27.
