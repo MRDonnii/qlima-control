@@ -108,7 +108,6 @@ def _default_levels() -> dict[str, Any]:
     return {"stop": 1, "start": 1, "floor": 1, "strikes": 0, "park": False, "hold_cut": 0}
 
 
-@dataclass
 
 def _half(value: float) -> float:
     return math.floor(value * 2 + 0.5) / 2
@@ -132,6 +131,7 @@ def fahrenheit_echo(celsius: float) -> float:
             best, err = f, e
     return _half((best - 32) / 1.8)
 
+@dataclass
 class Steering:
     """What the thermostat regulates to right now."""
 
