@@ -12,6 +12,10 @@ the value sent is steered in three steps (heat; cool is mirrored):
           target, so a running inverter turns down to its minimum and keeps running.
           It no longer depends on the stop level (1.10 sent stop level − 1, which was 2–3
           past the target on the garage and stopped the compressor anyway);
+          With Follow Me in half degrees (firmware 1.5+) hold follows the room in halves:
+          +0 below the target, hold − 0.5 at it, the full hold value above (HOLD_BAND), and a
+          start close to the target with the compressor running asks for only half a degree
+          (SOFT_START), so it does not run flat out past the target;
   stop  – the room is `stop_at` above the target: the unit is told its *stop level* above
           (the room when further), so the compressor stops – until the room is `start_at`
           below the target again.
@@ -87,6 +91,8 @@ BAND = 5
 TRACK_MAX = 45 * 60
 TRACK_TURN = 0.2
 HISTORY = 10
+SOFT_START = 0.5      # K: with half degrees, a start this close to the target (compressor running) asks for only half a degree
+HOLD_BAND = 0.1       # K: with half degrees, hold sends +0 this far below the target, the full hold value this far above
 DITHER = 0.1           # K: a half-degree hold uses the lower degree below target − this, the higher above target + this
 HOLD_OFFSET = 1        # degrees past the unit's target sent in hold (setting)
 HOLD_EARLY = 0.2       # K short of the target where the start step hands over to hold (setting)
@@ -155,6 +161,7 @@ class FollowMe:
         self.hold_early = HOLD_EARLY
         self.stop_margin = STOP
         self._dither_low = False
+        self._hold_band = 0  # half-degree hold: -1 room below target, 0 at it, 1 above
         # Learned (kept in the store).
         self.levels = {m: _default_levels() for m in MODES}
         self.verified = {m: {"stop": False, "start": False} for m in MODES}
@@ -319,18 +326,36 @@ class FollowMe:
 
     def _hold_degrees(self, mode: str, short: float, ts: float = 0.0, sign: int = 1) -> float:
         half = self.hold_half(mode)
+        if self.unit.half_degrees():
+            return self._hold_halves(half, short, ts, sign) / 2
         if half % 2 == 0:
             return half // 2
-        if self.unit.half_degrees():
-            value = ts + sign * half / 2
-            if fahrenheit_echo(value) == value:
-                return half / 2
         # Whole degrees only: take the two neighbours in turn, by the room.
         if short >= DITHER:
             self._dither_low = True
         elif short <= -DITHER:
             self._dither_low = False
         return (half - 1) // 2 if self._dither_low else (half + 1) // 2
+
+    def _hold_halves(self, half: int, short: float, ts: float, sign: int) -> int:
+        """Hold in half degrees past the unit's target, by the room (Follow Me in °F).
+
+        At the target the unit is told the room is a half degree less warm than the hold value
+        (e.g. +0.5); HOLD_BAND below the target it gets +0 (a little more heat), above it the
+        full hold value (e.g. +1). Each band holds until the room is back at the target, so it
+        does not flicker. The inverter turns up and down instead of stopping and starting.
+        """
+        if short >= HOLD_BAND:
+            self._hold_band = -1
+        elif short <= -HOLD_BAND:
+            self._hold_band = 1
+        elif (self._hold_band < 0 and short <= 0) or (self._hold_band > 0 and short >= 0):
+            self._hold_band = 0
+        h = max(0, half - 1 + self._hold_band) if half > 0 else 0
+        # A half no whole °F reaches (22.5, 27.5): one more half past the target – less effort.
+        while h < half and fahrenheit_echo(ts + sign * h / 2) != ts + sign * h / 2:
+            h += 1
+        return h
 
     @property
     def last_mode(self) -> str | None:
@@ -367,6 +392,12 @@ class FollowMe:
                 # whole shortfall – and at least its start level.
                 level = ts - sign * (lv["start"] + boost)
                 base = min(math.floor(room), level) if sign > 0 else max(math.ceil(room), level)
+                soft = ts - sign * 0.5
+                if (self.unit.half_degrees() and not boost and short < SOFT_START
+                        and self._compressor(now) and fahrenheit_echo(soft) == soft):
+                    # Close to the target with the compressor running (back from hold): ask
+                    # for half a degree, so it does not run flat out up to the target and past it.
+                    base = soft
             elif step == "stop":
                 level = ts + sign * self.stop_level(mode)
                 base = max(math.ceil(room), level) if sign > 0 else min(math.floor(room), level)
