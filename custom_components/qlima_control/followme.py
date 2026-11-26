@@ -91,6 +91,10 @@ BAND = 5
 TRACK_MAX = 45 * 60
 TRACK_TURN = 0.2
 HISTORY = 10
+LEAD_MIN = 6.0        # min: the unit takes about this long to turn down – the start step ends that much rise early
+LEAD_MAX = 1.0        # K: … but never more than this short of the target
+SLOPE_SPAN = 8 * 60   # s of room readings the rise rate is taken over (at least 3 min)
+RISING = 0.02         # K/min: the room counts as rising (hold stays on its full value, no soft start)
 SOFT_START = 0.5      # K: with half degrees, a start this close to the target (compressor running) asks for only half a degree
 HOLD_BAND = 0.1       # K: with half degrees, hold sends +0 this far below the target, the full hold value this far above
 DITHER = 0.1           # K: a half-degree hold uses the lower degree below target − this, the higher above target + this
@@ -162,6 +166,8 @@ class FollowMe:
         self.stop_margin = STOP
         self._dither_low = False
         self._hold_band = 0  # half-degree hold: -1 room below target, 0 at it, 1 above
+        self._rooms: list[tuple[float, float]] = []  # (time, room) for the rise rate
+        self._rise: float | None = None  # K/min towards the target side (heat: rising > 0)
         # Learned (kept in the store).
         self.levels = {m: _default_levels() for m in MODES}
         self.verified = {m: {"stop": False, "start": False} for m in MODES}
@@ -345,7 +351,9 @@ class FollowMe:
         full hold value (e.g. +1). Each band holds until the room is back at the target, so it
         does not flicker. The inverter turns up and down instead of stopping and starting.
         """
-        if short >= HOLD_BAND:
+        if self._rise is not None and self._rise > RISING:
+            self._hold_band = 1  # still rising: the full hold value, so it turns down in time
+        elif short >= HOLD_BAND:
             self._hold_band = -1
         elif short <= -HOLD_BAND:
             self._hold_band = 1
@@ -356,6 +364,14 @@ class FollowMe:
         while h < half and fahrenheit_echo(ts + sign * h / 2) != ts + sign * h / 2:
             h += 1
         return h
+
+    def _slope(self, now: float, room: float) -> float | None:
+        """How fast the room moves, K/min (heat: rising > 0), over the last SLOPE_SPAN."""
+        self._rooms = [(t, r) for t, r in self._rooms if now - t <= SLOPE_SPAN] + [(now, room)]
+        t0, r0 = self._rooms[0]
+        if now - t0 < 3 * 60:
+            return None
+        return (room - r0) / ((now - t0) / 60)
 
     @property
     def last_mode(self) -> str | None:
@@ -383,6 +399,8 @@ class FollowMe:
             self._target, self._unit_target = steering.target, steering.unit_target
             short = round((steering.target - room) * sign, 2)  # > 0: the room still needs heat (cool)
             self._short = short
+            slope = self._slope(now, room)
+            self._rise = None if slope is None else slope * sign
             step = self._next_step(short, now, mode)
             lv = self.levels[mode]
             ts = steering.unit_target
@@ -394,6 +412,7 @@ class FollowMe:
                 base = min(math.floor(room), level) if sign > 0 else max(math.ceil(room), level)
                 soft = ts - sign * 0.5
                 if (self.unit.half_degrees() and not boost and short < SOFT_START
+                        and (self._rise is None or self._rise <= RISING)
                         and self._compressor(now) and fahrenheit_echo(soft) == soft):
                     # Close to the target with the compressor running (back from hold): ask
                     # for half a degree, so it does not run flat out up to the target and past it.
@@ -418,7 +437,12 @@ class FollowMe:
         last = self.step
         early = self.early(mode)
         if last == "start":
+            if self.unit.half_degrees() and self._rise is not None and self._rise > RISING:
+                # Rising fast: the unit needs LEAD_MIN to turn down, so hand over that much rise early.
+                early = max(early, min(LEAD_MAX, self._rise * LEAD_MIN))
             return "start" if short > early else "hold"
+        if last == "hold" and short > 0 and self.unit.half_degrees() and self._rise is not None and self._rise > RISING:
+            return "hold"  # handed over early while the room rises: let it coast up to the target
         if last == "hold" and early > 0:
             # Handed over early: the room may sit there – push again only once it falls further.
             start_at = max(start_at, round(early + 0.1, 2))
