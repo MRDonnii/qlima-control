@@ -84,7 +84,7 @@
             "data_description": {
               "setpoint_compensation": "Not needed with Follow Me.",
               "presence_entity": "Away lowers the heat target (and raises the cool target).",
-              "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. If it stops anyway, less is learned.",
+              "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. With firmware 1.5+ (Follow Me in half degrees) 0.5 works too. If it stops anyway, less is learned.",
               "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
               "stop_margin": "If the room still gets too warm, the unit is told to stop.",
               "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",
@@ -226,7 +226,7 @@
           "regulation": "The unit: it gets the room temperature as Follow Me and holds the target itself (no on/off cycling, no idling at 17 °C). The thermostat: on/off with hysteresis and a neutral idle at the lowest target. The unit falls back to the thermostat while Follow Me is off.",
           "setpoint_compensation": "Not needed with Follow Me.",
           "presence_entity": "Away lowers the heat target (and raises the cool target).",
-          "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. If it stops anyway, less is learned.",
+          "hold_offset": "At the target the unit keeps running at its lowest instead of stopping. 1 degree suits most units. With firmware 1.5+ (Follow Me in half degrees) 0.5 works too. If it stops anyway, less is learned.",
           "hold_early": "The room keeps rising a little after the unit turns down, so it turns down a little before the target.",
           "stop_margin": "If the room still gets too warm, the unit is told to stop.",
           "fan_low_when_idle": "While the unit is not heating its fan otherwise keeps blowing cold air. Your own fan setting comes back when it heats again.",

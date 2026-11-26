@@ -274,7 +274,7 @@ class QlimaThermostat(ClimateEntity, RestoreEntity):
         self._compensate = bool(cfg.get(CONF_SETPOINT_COMPENSATION, True))
         self._opening_reduce_to = cfg.get(CONF_OPENING_REDUCE_TO, DEFAULT_OPENING_REDUCE_TO)
         self._regulation = cfg.get(CONF_REGULATION, DEFAULT_REGULATION)
-        self._fm.hold_offset = int(round(float(cfg.get(CONF_HOLD_OFFSET, DEFAULT_HOLD_OFFSET))))
+        self._fm.hold_offset = round(float(cfg.get(CONF_HOLD_OFFSET, DEFAULT_HOLD_OFFSET)) * 2) / 2
         self._fm.hold_early = float(cfg.get(CONF_HOLD_EARLY, DEFAULT_HOLD_EARLY))
         self._fm.stop_margin = float(cfg.get(CONF_STOP_MARGIN, DEFAULT_STOP_MARGIN))
         self._fan.enabled = bool(cfg.get(CONF_FAN_LOW_IDLE, DEFAULT_FAN_LOW_IDLE))

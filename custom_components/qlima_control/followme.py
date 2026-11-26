@@ -315,7 +315,7 @@ class FollowMe:
 
     def hold_half(self, mode: str) -> int:
         """The hold value in half degrees past the unit's target (setting minus what was learned)."""
-        return max(0, 2 * int(self.hold_offset) - int(self.levels[mode].get("hold_cut", 0)))
+        return max(0, int(round(2 * float(self.hold_offset))) - int(self.levels[mode].get("hold_cut", 0)))
 
     def _hold_degrees(self, mode: str, short: float, ts: float = 0.0, sign: int = 1) -> float:
         half = self.hold_half(mode)
