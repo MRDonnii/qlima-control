@@ -438,9 +438,12 @@ class FollowMe:
         want = max(0.3 * base, min(3.0 * base, base * (1 + POWER_GAIN * predicted)))
         deadband = max(POWER_DEADBAND_MIN, POWER_DEADBAND * base)
         if running and power is not None and now - self._ph_at >= POWER_STEP_EVERY:
-            if power > want + deadband and self._ph < cap:
+            # Never against the room: no "warmer" (less heat) while it is about to be short of the
+            # target, no "colder" (more heat) while it is about to be over (the unit's own ramps
+            # make the power swing past the dead band now and then).
+            if power > want + deadband and self._ph < cap and predicted < HOLD_BAND:
                 self._ph, self._ph_at = self._ph + 1, now
-            elif power < want - deadband and self._ph > 0:
+            elif power < want - deadband and self._ph > 0 and predicted > -HOLD_BAND:
                 self._ph, self._ph_at = self._ph - 1, now
         h = min(self._ph, cap)
         # A half no whole °F reaches: the neighbour past the target, else the one before it.

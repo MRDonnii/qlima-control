@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.3 (firmware 1.5.0)
+Change by Claude AI – power hold never works against the room.
+- On the garage 1.14.2 learned the right power first time (about 290 W electric to hold 23.5 °C at 0 °C outdoor). But with the room 0.2 K short it once moved to "warmer" (less heat), because the unit's own ramp-up took the power past the dead band for a moment.
+- Now power hold gives no less heat while the room is about to be short of the target, and no more while it is about to be over. In simulation with ±25 % power noise the room stays within about 0.1 K, without stops.
+
 ## 1.14.2 (firmware 1.5.0)
 Change by Claude AI – power hold in the meter's own watts.
 - 1.14.0/1.14.1 used fixed watts (start 1000 W, 1500 W per K, 150 W dead band) taken from a heat-output sensor, but the power meter gives electric watts – about a third. On the garage it wanted 830 W where the room needs ~330 W electric, and asked for more heat.
