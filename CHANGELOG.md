@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.1 (firmware 1.5.0)
+Change by Claude AI – power hold learns the right power.
+- On the garage 1.14.0 learned 445 W where the room needs about 950 W: it learned while the unit was still ramping up after a start, on every call instead of once a minute, and only right at the target, so a room standing a little short never corrected it.
+- Now the power is learned once a minute, only after the compressor has run and hold has lasted 10 min, whenever the room stands still within 0.5 K of the target – so a wrong guess corrects itself. Clamped to 250–3000 W. Kept as *hold_w2* (the 1.14.0 values are not used).
+
 ## 1.14.0 (firmware 1.5.0)
 Change by Claude AI – hold steered on the power meter (with half degrees and a power meter).
 - **Power hold.** The room sensor is slow and the unit lags, but the power meter shows at once how much heat the unit gives. In hold the room now decides the power wanted – what the room needs at the target, learned per 5 °C outdoor band while the room stands still there (start 1000 W; *follow_me_weather* → *hold_w*), plus 1500 W per K the room is short of the target (the rise over the next 3 min included) – and the Follow Me value moves half a degree at a time, at most every 3 min, until the power gets there (between +0 and +1.5, never as far as a stop). With the compressor off or in a defrost the value stays. New attribute *follow_me_power_want*.

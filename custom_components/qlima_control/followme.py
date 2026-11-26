@@ -102,7 +102,9 @@ POWER_DEADBAND = 150.0  # W: power hold moves the value only when the power is t
 POWER_STEP_EVERY = 180  # s between two half-degree moves in power hold (the unit needs minutes to follow)
 POWER_MIN, POWER_MAX = 250.0, 3000.0
 HOLD_W_DEFAULT = 1000.0  # W the room needs at the target, until it is learned per outdoor band
-HOLD_W_ALPHA = 0.1    # how fast that is learned (per evaluation, while the room stands still at the target)
+HOLD_W_ALPHA = 0.1    # how fast that is learned (once a minute, while the room stands still)
+HOLD_W_SETTLE = 10 * 60  # s the compressor must have run, and hold lasted, before the power is learned
+HOLD_W_KEY = "hold_w2"   # learned W per outdoor band (1.14.0 learned "hold_w" too eagerly – not used)
 HOLD_MAX_HALVES = 3   # power hold goes no further than +1.5 past the unit's target (a stop is further)
 AGE_MAX = 6 * 60      # s: a room reading this old is not extrapolated further (sensors report every few minutes)
 SOFT_MILD = 5.0       # °C outdoor: above it a soft start asks for half a degree, at or below a whole one
@@ -182,6 +184,7 @@ class FollowMe:
         self._room_seen: float | None = None  # last room value and when it last changed
         self._ph: int | None = None  # power hold: half degrees past the unit's target now
         self._ph_at = 0.0
+        self._hold_w_at = 0.0
         self._power_want: float | None = None
         self._room_at = 0.0
         # Learned (kept in the store).
@@ -409,15 +412,20 @@ class FollowMe:
         if self._ph is None:
             self._ph, self._ph_at = min(cap, h_room), now
         stats = self.weather[mode].setdefault(self.band() or "", {}) if self.band() is not None else {}
-        base_w = float(stats.get("hold_w", HOLD_W_DEFAULT))
+        base_w = float(stats.get(HOLD_W_KEY, HOLD_W_DEFAULT))
         rise = self._rise or 0.0
         predicted = short - rise * POWER_PREDICT
         want = max(POWER_MIN, min(POWER_MAX, base_w + POWER_GAIN * predicted))
         running = bool(self._compressor(now)) and not self._defrosting()
         if running and power is not None:
-            if abs(short) < 0.15 and abs(rise) < 0.01 and self.band() is not None:
-                # Standing still at the target: this is what the room needs here.
-                stats["hold_w"] = round(base_w + (power - base_w) * HOLD_W_ALPHA, 1)
+            settled = (self._on_since is not None and now - self._on_since >= HOLD_W_SETTLE
+                       and now - self._step_since >= HOLD_W_SETTLE)
+            if (settled and self._rise is not None and abs(self._rise) < 0.01 and abs(short) < 0.5
+                    and self.band() is not None and now - self._hold_w_at >= 60):
+                # The room stands still: the power it gets now is what it needs (also a little off
+                # the target – so a wrong guess corrects itself instead of leaving the room short).
+                self._hold_w_at = now
+                stats[HOLD_W_KEY] = round(max(POWER_MIN, min(POWER_MAX, base_w + (power - base_w) * HOLD_W_ALPHA)), 1)
                 self._save()
             if now - self._ph_at >= POWER_STEP_EVERY:
                 if power > want + POWER_DEADBAND and self._ph < cap:
