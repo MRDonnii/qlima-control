@@ -724,6 +724,9 @@
     },
     "install_own_yaml": {
       "message": "Cannot verify that this ESP runs the factory image, and ESPHome Builder does not know it. If you adopted it in ESPHome, update it from ESPHome Builder (or enable the device's ESPHome update entity to install from here). Otherwise flash the latest factory image with the web installer – without erasing."
+    },
+    "install_in_builder": {
+      "message": "ESPHome Builder could not be reached from Home Assistant. Open ESPHome Builder and press Install on the device – it builds the newest Qlima Control firmware."
     }
   }
 }

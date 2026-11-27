@@ -154,7 +154,21 @@ class FirmwareUpdate(QlimaEntity, UpdateEntity):
         esp = self._esp_update()
         if not esp:
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="install_own_yaml")
-        await self.hass.services.async_call("update", "install", {"entity_id": esp}, blocking=True)
+        state = self.hass.states.get(esp)
+        if state is not None and state.state == "on":
+            await self.hass.services.async_call("update", "install", {"entity_id": esp}, blocking=True)
+            return
+        # ESPHome Builder only offers an install when its own config or ESPHome version changed;
+        # a new Qlima Control release on GitHub does not count, so the update service refuses
+        # ("no update available"). Its install builds the device's yaml – with the new remote
+        # package – either way, so it is called directly.
+        component = self.hass.data.get("update")
+        entity = component.get_entity(esp) if component is not None and hasattr(component, "get_entity") else None
+        if entity is None:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="install_in_builder")
+        _LOGGER.info("Installing firmware %s through %s (ESPHome Builder shows no update of its own)",
+                     self._latest, esp)
+        await entity.async_install(None, False)
 
     async def _check(self, _now=None) -> None:
         try:

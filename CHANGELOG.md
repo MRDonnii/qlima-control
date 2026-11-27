@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.4 (firmware 1.5.0)
+Change by Claude AI.
+- **Firmware update through ESPHome Builder works again.** The *Firmware* entity's Install handed over to ESPHome Builder's update for the device, but Builder only offers an update when its own config or ESPHome version changed – a new Qlima Control release does not count – so Home Assistant refused with "no update available" (seen on a 1.4.5 → 1.5.0 update). It now calls Builder's install directly when Builder shows no update of its own; that builds the device's yaml with the new package. If Builder cannot be reached, the message says to press Install in ESPHome Builder.
+
 ## 1.14.3 (firmware 1.5.0)
 Change by Claude AI – power hold never works against the room.
 - On the garage 1.14.2 learned the right power first time (about 290 W electric to hold 23.5 °C at 0 °C outdoor). But with the room 0.2 K short it once moved to "warmer" (less heat), because the unit's own ramp-up took the power past the dead band for a moment.
